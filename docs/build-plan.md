@@ -100,9 +100,10 @@ flyby numbers, statuses, queued actions, incomes — without reading code.
 
 Pieces:
 
-- **Sim event stream.** `step()` accepts an optional event sink emitting plain-data events with
-  attribution (who hit whom for how much; what spawned/died/started/finished/was blocked). Ratify
-  `docs/decisions/sim-events.md` first. Events are pure output — no golden may move.
+- **Sim event stream.** `step(state, commands, events?)` accepts an optional out-array and pushes
+  plain-data events with attribution (who hit whom for how much; what spawned/died/started/
+  finished/was blocked). Decided in `docs/decisions/sim-events.md` — an array, not a callback, so
+  no caller code can run mid-step. Events are pure output — no golden may move.
 - **Replay file.** JSON `{ name, seed, setup, log }` — enough to reconstruct a scenario from
   nothing. `apps/headless` grows a recorder CLI (`npm run replay:record <scenario>`) that writes
   the Gate 4 AI match as the first checked-in replay fixture.
@@ -111,8 +112,8 @@ Pieces:
   constructing), per-player mineral + supply HUD, pause / play / speed / step-one-tick controls.
 
 **Acceptance (gate:6 exits 0):**
-- Determinism regression: with a sink attached, every previously committed golden still matches —
-  events changed no hashes.
+- Determinism regression: with an events array attached, every previously committed golden still
+  matches — events changed no hashes.
 - Event determinism: two identical runs emit identical event logs (compared serialized).
 - Attribution: combat-scenario DAMAGE events carry attacker id, target id, and amounts that match
   the damage-table math.
