@@ -14,8 +14,8 @@ describe('state hash', () => {
   })
   it('is independent of entity array order (sorted by id)', () => {
     const base = initialState(7)
-    const e1 = { id: 1, type: 0, x: fromInt(2), y: fromInt(3), hp: 10 }
-    const e2 = { id: 2, type: 0, x: fromInt(5), y: fromInt(1), hp: 10 }
+    const e1 = { id: 1, type: 'scout', owner: 0, x: fromInt(2), y: fromInt(3), hp: 10 }
+    const e2 = { id: 2, type: 'scout', owner: 0, x: fromInt(5), y: fromInt(1), hp: 10 }
     expect(hashState(withEntities(base, [e1, e2]))).toBe(hashState(withEntities(base, [e2, e1])))
   })
 })

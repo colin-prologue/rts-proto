@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { resolve, join } from 'node:path'
-import { rightClickToMove, createProjection } from '@rts/render'
+import { rightClickToMove, createProjection, interpolatePositions } from '@rts/render'
+import { initialState, fromInt, type State } from '@rts/sim'
 
 // The render/sim boundary is structural: render may import sim TYPES freely, but the only VALUES
 // it may import are pure numeric converters for the read boundary (drawing) and the input/authoring
@@ -44,6 +45,41 @@ describe('Gate 2 — dumb renderer + input->commands', () => {
 
   it('projection is constructible (drives worldToScreen)', () => {
     expect(() => createProjection()).not.toThrow()
+  })
+
+  it('projection round-trips exactly (screenToWorld inverts worldToScreen)', () => {
+    const p = createProjection()
+    for (const [wx, wy] of [
+      [0, 0],
+      [5, 9],
+      [12.5, 3.25],
+      [-4, 7],
+    ]) {
+      const [sx, sy] = p.worldToScreen(wx, wy)
+      const [rx, ry] = p.screenToWorld(sx, sy)
+      expect(rx).toBeCloseTo(wx, 10)
+      expect(ry).toBeCloseTo(wy, 10)
+    }
+  })
+
+  it('interpolation places rendered positions between two sim states', () => {
+    const base = initialState(1)
+    const prev: State = {
+      ...base,
+      entities: [{ id: 1, type: 'scout', owner: 0, x: fromInt(2), y: fromInt(4), hp: 100 }],
+    }
+    const next: State = {
+      ...base,
+      tick: base.tick + 1,
+      entities: [{ id: 1, type: 'scout', owner: 0, x: fromInt(3), y: fromInt(6), hp: 100 }],
+    }
+    const mid = interpolatePositions(prev, next, 0.5).get(1)!
+    expect(mid.x).toBeCloseTo(2.5, 10)
+    expect(mid.y).toBeCloseTo(5, 10)
+    const at0 = interpolatePositions(prev, next, 0).get(1)!
+    expect(at0.x).toBeCloseTo(2, 10)
+    const at1 = interpolatePositions(prev, next, 1).get(1)!
+    expect(at1.y).toBeCloseTo(6, 10)
   })
 
   it('the projection decision record exists and is ratified (not a proposal)', () => {

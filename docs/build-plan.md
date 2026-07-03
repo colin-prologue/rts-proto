@@ -90,9 +90,47 @@ sockets needed to prove correctness), then the WebSocket transport.
 
 **Human review:** latency feel over a real link; whether delay=2 @ 10 Hz needs tuning.
 
+## Gate 6 — Replay viewer (make the sim watchable)
+
+The first post-campaign tool from the determinism corollary: replays as a first-class surface.
+Purpose is twofold — every headless scenario the gates run becomes *watchable* by a human, and
+balance/AI tuning gets its review surface (watch a match, edit a data row, watch again). The bar,
+set explicitly by the maintainer: a non-author must be able to tell what is going on — damage
+flyby numbers, statuses, queued actions, incomes — without reading code.
+
+Pieces:
+
+- **Sim event stream.** `step(state, commands, events?)` accepts an optional out-array and pushes
+  plain-data events with attribution (who hit whom for how much; what spawned/died/started/
+  finished/was blocked). Decided in `docs/decisions/sim-events.md` — an array, not a callback, so
+  no caller code can run mid-step. Events are pure output — no golden may move.
+- **Replay file.** JSON `{ name, seed, setup, log }` — enough to reconstruct a scenario from
+  nothing. `apps/headless` grows a recorder CLI (`npm run replay:record <scenario>`) that writes
+  the Gate 4 AI match as the first checked-in replay fixture.
+- **Viewer.** A playground replay mode: all entity types visually distinct, hp bars, damage
+  flybys, production queue pips with progress, status glyphs (moving/attacking/gathering/
+  constructing), per-player mineral + supply HUD, pause / play / speed / step-one-tick controls.
+
+**Acceptance (gate:6 exits 0):**
+- Determinism regression: with an events array attached, every previously committed golden still
+  matches — events changed no hashes.
+- Event determinism: two identical runs emit identical event logs (compared serialized).
+- Attribution: combat-scenario DAMAGE events carry attacker id, target id, and amounts that match
+  the damage-table math.
+- Round-trip: the recorded Gate 4 replay file re-simulates to the committed `gate4.match.hash`.
+- View-model units (headless, no canvas): damage-flyby entries derived from DAMAGE events with
+  positions and lifetimes; hp-bar fractions clamped to [0,1]; queue-pip model from building state.
+- `docs/decisions/sim-events.md` is ratified (Status: decided).
+- gate:6 joins `gates:all` and the final line reads `ALL GATES PASS` again.
+
+**Human review:** load the Gate 4 replay in the browser and judge legibility cold: can you tell
+who is winning and why? Are damage numbers, production, and income readable at 1× speed without
+explanation? That judgment is the point of the gate and stays out of any goal condition.
+
 ---
 
 ## Aggregate
 
-`npm run gates:all` runs gate:1..5 in order and prints `GATE N PASS` per gate plus a final
+`npm run gates:all` runs the gates in order and prints `GATE N PASS` per gate plus a final
 `ALL GATES PASS`. That final line is the single measurable end state for a full-campaign goal.
+(Currently gate:1..5; gate:6 joins the loop as part of its own acceptance.)

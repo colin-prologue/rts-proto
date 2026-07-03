@@ -11,6 +11,7 @@
     "gate:3": "node scripts/gates/gate3.mjs",
     "gate:4": "node scripts/gates/gate4.mjs",
     "gate:5": "node scripts/gates/gate5.mjs",
+    "gate:6": "node scripts/gates/gate6.mjs",
     "gates:all": "node scripts/gates/all.mjs"
   },
   "devDependencies": {

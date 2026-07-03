@@ -99,6 +99,23 @@ wall-clock into one client diverges the per-turn hashes; the same sync passes ov
 WebSocket transport. Do not sync any world state over the wire — commands only.
 ```
 
+### Gate 6 (post-campaign) — replay viewer
+
+```
+/goal `npm run gate:6` exits 0 and prints "GATE 6 PASS", and `npm run gates:all` now includes
+gate 6 and prints "GATE 1 PASS" through "GATE 6 PASS" plus "ALL GATES PASS": with an event sink
+attached to step(), every previously committed golden still matches (events are pure output);
+two identical runs emit identical serialized event logs; DAMAGE events carry attacker id, target
+id, and table-accurate amounts; a replay JSON recorded by the headless CLI re-simulates to the
+committed gate4.match.hash; view-model unit tests cover damage flybys, hp fractions, and queue
+pips with no canvas; the sim-events decision record carries Status: decided. Do not weaken any
+existing gate, test, or golden; placeholder expect.fail contracts in gate6 may only be replaced
+by implementations of the contracts described in their comments.
+```
+
+The viewer's *legibility* — flybys, statuses, queue pips readable by a non-author at 1× speed —
+is the Gate 6 human-review item and deliberately not in the goal condition (see build-plan).
+
 ## Why the goal excludes "is it fun"
 
 The evaluator can't judge feel — it reads text, runs nothing. "Fun / responsive / interesting
