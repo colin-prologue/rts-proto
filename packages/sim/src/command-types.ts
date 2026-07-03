@@ -1,4 +1,4 @@
-export type CommandType = 'MOVE' | 'ATTACK' | 'BUILD' | 'TRAIN' | 'STOP'
+export type CommandType = 'MOVE' | 'ATTACK' | 'BUILD' | 'TRAIN' | 'STOP' | 'GATHER'
 
 export interface Command {
   type: CommandType

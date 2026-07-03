@@ -2,23 +2,58 @@ export * from './fixed'
 export * from './rng'
 export * from './hash'
 export * from './types'
+export * from './data'
 export * from './command-types'
 export * from './commands'
 export * from './step'
 
 import type { State } from './types'
+import { TILE_PASSABLE } from './types'
+import type { GameData } from './data'
+import { DEFAULT_DATA } from './data'
 import { seedRng } from './rng'
-import { fromInt } from './fixed'
+import { type Fixed, fromInt } from './fixed'
 
 /**
- * A fresh world with one scout at (1,1) so a queued MOVE has something to move (Gate 1).
- * Real world setup (map, players, bases) grows here with the RTS loop (Gate 3).
+ * A fresh world: open 32×32 map, two players, one player-0 scout at (1,1) so a queued MOVE has
+ * something to move. Scenarios and tests grow worlds from here with spawn().
  * Entities are kept sorted by id — step() iterates in array order (CONSTITUTION IV).
  */
-export function initialState(seed: number): State {
+export function initialState(seed: number, data: GameData = DEFAULT_DATA): State {
+  const w = 32
+  const h = 32
   return {
     tick: 0,
     rng: seedRng(seed),
-    entities: [{ id: 1, type: 0, x: fromInt(1), y: fromInt(1), hp: 100 }],
+    entities: [{ id: 1, type: 'scout', owner: 0, x: fromInt(1), y: fromInt(1), hp: data.units.scout.hp }],
+    players: [
+      { id: 0, minerals: 200, supplyUsed: 1 }, // the starting scout holds 1 supply
+      { id: 1, minerals: 200, supplyUsed: 0 },
+    ],
+    nextEntityId: 2,
+    map: { w, h, flags: new Array(w * h).fill(TILE_PASSABLE) },
+    data,
   }
+}
+
+/**
+ * Pure world-building helper for scenarios, fixtures, and match setup: returns a new state with
+ * one entity of `type` appended. Not a gameplay path — in-game creation goes through BUILD/TRAIN
+ * commands inside step().
+ */
+export function spawn(state: State, type: string, owner: number, x: Fixed, y: Fixed): State {
+  const spec = state.data.units[type]
+  const e = {
+    id: state.nextEntityId,
+    type,
+    owner,
+    x,
+    y,
+    hp: spec.hp,
+    ...(spec.amount !== undefined ? { amount: spec.amount } : {}),
+  }
+  const players = state.players.map((p) =>
+    p.id === owner ? { ...p, supplyUsed: p.supplyUsed + spec.supply } : p
+  )
+  return { ...state, entities: [...state.entities, e], players, nextEntityId: state.nextEntityId + 1 }
 }

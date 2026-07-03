@@ -1,0 +1,12 @@
+{
+  "name": "zealot",
+  "hp": 120,
+  "armor": "light",
+  "damage": 14,
+  "damageType": "normal",
+  "range": 1,
+  "speed": 1,
+  "supply": 2,
+  "cost": 100,
+  "buildTime": 15
+}

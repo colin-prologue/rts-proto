@@ -66,12 +66,12 @@ describe('Gate 2 — dumb renderer + input->commands', () => {
     const base = initialState(1)
     const prev: State = {
       ...base,
-      entities: [{ id: 1, type: 0, x: fromInt(2), y: fromInt(4), hp: 100 }],
+      entities: [{ id: 1, type: 'scout', owner: 0, x: fromInt(2), y: fromInt(4), hp: 100 }],
     }
     const next: State = {
       ...base,
       tick: base.tick + 1,
-      entities: [{ id: 1, type: 0, x: fromInt(3), y: fromInt(6), hp: 100 }],
+      entities: [{ id: 1, type: 'scout', owner: 0, x: fromInt(3), y: fromInt(6), hp: 100 }],
     }
     const mid = interpolatePositions(prev, next, 0.5).get(1)!
     expect(mid.x).toBeCloseTo(2.5, 10)
