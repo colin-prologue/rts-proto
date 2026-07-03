@@ -7,6 +7,8 @@ export interface Entity {
   x: Fixed
   y: Fixed
   hp: number
+  /** Grid destination of an in-flight MOVE; cleared on arrival or STOP. Part of the state hash. */
+  target?: { x: Fixed; y: Fixed }
 }
 
 export interface State {

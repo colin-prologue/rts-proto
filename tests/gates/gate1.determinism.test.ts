@@ -68,6 +68,14 @@ describe('Gate 1 — deterministic sim core', () => {
     expect(h1).toBe(h2)
   })
 
+  it('the queued MOVE actually moves the unit to its target on the grid', () => {
+    const unit = run().entities.find((e) => e.id === 1)
+    expect(unit).toBeDefined()
+    expect(unit!.x).toBe(fromInt(5))
+    expect(unit!.y).toBe(fromInt(5))
+    expect(unit!.target).toBeUndefined() // arrived — target cleared
+  })
+
   it('an injected out-of-band rng draw diverges the end state (the guard has teeth)', () => {
     const clean = hashState(run())
     let s = initialState(1234)

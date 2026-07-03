@@ -40,6 +40,10 @@ export function hashState(s: State): Hash {
     h = hashNum(h, raw(e.x))
     h = hashNum(h, raw(e.y))
     h = hashNum(h, e.hp)
+    // Every simulated field feeds the hash — an unhashed field is an invisible desync channel.
+    h = hashU32(h, e.target ? 1 : 0)
+    h = hashNum(h, e.target ? raw(e.target.x) : 0)
+    h = hashNum(h, e.target ? raw(e.target.y) : 0)
   }
   return h >>> 0
 }
