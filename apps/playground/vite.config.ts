@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 
 // Same source aliases as the root vitest config — no build step, packages resolve straight to TS.
 export default defineConfig({
+  server: { port: Number(process.env.PORT) || 5173 }, // PORT lets harnesses assign a free port
   resolve: {
     alias: {
       '@rts/sim': resolve(__dirname, '../../packages/sim/src/index.ts'),

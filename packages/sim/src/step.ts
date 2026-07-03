@@ -1,6 +1,7 @@
 import type { State, Entity, Player } from './types'
 import { TILE_PASSABLE } from './types'
 import type { Command } from './command-types'
+import type { SimEvent } from './events'
 import { sortCommands } from './commands'
 import { type Fixed, fromInt, add, sub, neg, cmp, floorToInt } from './fixed'
 import { GATHER_PERIOD, tableDamage, type UnitSpec } from './data'
@@ -42,7 +43,7 @@ function supplyCap(entities: Entity[], specs: Record<string, UnitSpec>, playerId
   return cap
 }
 
-export function step(state: State, commands: Command[]): State {
+export function step(state: State, commands: Command[], events?: SimEvent[]): State {
   const specs = state.data.units
   const entities: Entity[] = state.entities.map((e) => ({
     ...e,
@@ -53,14 +54,19 @@ export function step(state: State, commands: Command[]): State {
   let nextEntityId = state.nextEntityId
   const byId = new Map(entities.map((e) => [e.id, e]))
   const playerById = new Map(players.map((p) => [p.id, p]))
+  // Events are pure output (docs/decisions/sim-events.md): plain data pushed to the caller's
+  // array, never read back. When no array is passed, emission is a no-op.
+  const emit = (e: SimEvent) => events?.push(e)
 
-  const spawn = (type: string, owner: number, x: Fixed, y: Fixed, constructing = 0) => {
+  const spawn = (type: string, owner: number, x: Fixed, y: Fixed, constructing = 0): number => {
     const spec = specs[type]
     const e: Entity = { id: nextEntityId++, type, owner, x, y, hp: spec.hp }
     if (constructing > 0) e.constructing = constructing
     if (spec.amount !== undefined) e.amount = spec.amount
     entities.push(e) // ids only increase, so pushing keeps the sorted-by-id invariant
     byId.set(e.id, e)
+    emit({ kind: 'SPAWN', id: e.id, type, owner })
+    return e.id
   }
 
   // -- 1. commands, in (playerId, seq) order ------------------------------------------------
@@ -132,12 +138,19 @@ export function step(state: State, commands: Command[]): State {
           if (!b || !spec || !player) continue
           if (b.owner !== c.playerId || (b.constructing ?? 0) > 0) continue
           if (!specs[b.type]?.trains?.includes(p.unit)) continue
-          if (player.minerals < spec.cost) continue
+          if (player.minerals < spec.cost) {
+            emit({ kind: 'TRAIN_BLOCKED', building: b.id, unit: p.unit, reason: 'minerals' })
+            continue
+          }
           // Supply is reserved at enqueue and released on death — overproduction is blocked here.
-          if (player.supplyUsed + spec.supply > supplyCap(entities, specs, c.playerId)) continue
+          if (player.supplyUsed + spec.supply > supplyCap(entities, specs, c.playerId)) {
+            emit({ kind: 'TRAIN_BLOCKED', building: b.id, unit: p.unit, reason: 'supply' })
+            continue
+          }
           player.minerals -= spec.cost
           player.supplyUsed += spec.supply
           ;(b.queue ??= []).push({ unit: p.unit, remaining: spec.buildTime })
+          emit({ kind: 'TRAIN_START', building: b.id, unit: p.unit })
         }
         break
       }
@@ -157,7 +170,8 @@ export function step(state: State, commands: Command[]): State {
       if (head.remaining <= 0) {
         e.queue!.shift()
         if (e.queue!.length === 0) delete e.queue
-        spawn(head.unit, e.owner, add(e.x, fromInt(1)), e.y)
+        const id = spawn(head.unit, e.owner, add(e.x, fromInt(1)), e.y)
+        emit({ kind: 'TRAIN_DONE', building: e.id, unit: head.unit, id })
       }
     }
   }
@@ -178,6 +192,7 @@ export function step(state: State, commands: Command[]): State {
         node.amount! -= take
         const player = playerById.get(e.owner)
         if (player) player.minerals += take
+        emit({ kind: 'GATHER', worker: e.id, node: node.id, amount: take })
       }
     } else {
       e.target = { x: node.x, y: node.y } // walk to the node
@@ -220,6 +235,7 @@ export function step(state: State, commands: Command[]): State {
     if (inRange(e, t, spec.range)) {
       const dealt = tableDamage(state.data, spec.damageType, specs[t.type].armor, spec.damage)
       damage.set(t.id, (damage.get(t.id) ?? 0) + dealt)
+      emit({ kind: 'DAMAGE', attacker: e.id, target: t.id, amount: dealt })
     }
   }
   for (const [id, dmg] of damage) {
@@ -241,6 +257,7 @@ export function step(state: State, commands: Command[]): State {
         // (Minerals are deliberately NOT refunded: losing a producing building costs its queue.)
         for (const q of e.queue ?? []) player.supplyUsed -= specs[q.unit]?.supply ?? 0
       }
+      emit({ kind: 'DEATH', id: e.id, type: e.type, owner: e.owner })
     }
     for (const e of survivors) {
       if (e.attackTarget !== undefined && !alive.has(e.attackTarget)) delete e.attackTarget

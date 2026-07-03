@@ -2,7 +2,10 @@
   "name": "rts-proto",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "test": "vitest run packages",
     "test:all": "vitest run",
@@ -12,7 +15,8 @@
     "gate:4": "node scripts/gates/gate4.mjs",
     "gate:5": "node scripts/gates/gate5.mjs",
     "gate:6": "node scripts/gates/gate6.mjs",
-    "gates:all": "node scripts/gates/all.mjs"
+    "gates:all": "node scripts/gates/all.mjs",
+    "replay:record": "vite-node --config vitest.config.ts apps/headless/src/record.ts --"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
