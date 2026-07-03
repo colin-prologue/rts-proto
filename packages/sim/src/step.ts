@@ -70,7 +70,9 @@ export function step(state: State, commands: Command[]): State {
         const p = c.payload as { x: Fixed; y: Fixed }
         for (const id of c.unitIds) {
           const u = byId.get(id)
-          if (u && (specs[u.type]?.speed ?? 0) > 0) {
+          // playerId is the only identity a lockstep command carries — a unit not owned by the
+          // issuer is silently ignored, here and in every order-giving handler below.
+          if (u && u.owner === c.playerId && (specs[u.type]?.speed ?? 0) > 0) {
             u.target = { x: p.x, y: p.y }
             delete u.attackTarget
             delete u.gatherTarget
@@ -81,7 +83,7 @@ export function step(state: State, commands: Command[]): State {
       case 'STOP': {
         for (const id of c.unitIds) {
           const u = byId.get(id)
-          if (u) {
+          if (u && u.owner === c.playerId) {
             delete u.target
             delete u.attackTarget
             delete u.gatherTarget
@@ -93,7 +95,7 @@ export function step(state: State, commands: Command[]): State {
         const p = c.payload as { targetId: number }
         for (const id of c.unitIds) {
           const u = byId.get(id)
-          if (u && (specs[u.type]?.damage ?? 0) > 0) {
+          if (u && u.owner === c.playerId && (specs[u.type]?.damage ?? 0) > 0) {
             u.attackTarget = p.targetId
             delete u.gatherTarget
           }
@@ -104,7 +106,7 @@ export function step(state: State, commands: Command[]): State {
         const p = c.payload as { nodeId: number }
         for (const id of c.unitIds) {
           const u = byId.get(id)
-          if (u && (specs[u.type]?.gather ?? 0) > 0) {
+          if (u && u.owner === c.playerId && (specs[u.type]?.gather ?? 0) > 0) {
             u.gatherTarget = p.nodeId
             delete u.attackTarget
           }
@@ -232,7 +234,13 @@ export function step(state: State, commands: Command[]): State {
     for (const e of entities) {
       if (e.hp > 0) continue
       const player = playerById.get(e.owner)
-      if (player) player.supplyUsed -= specs[e.type]?.supply ?? 0
+      if (player) {
+        player.supplyUsed -= specs[e.type]?.supply ?? 0
+        // Supply was reserved at enqueue — a producer dying discards its queue, so the
+        // reservation must be released too or the player is permanently over cap.
+        // (Minerals are deliberately NOT refunded: losing a producing building costs its queue.)
+        for (const q of e.queue ?? []) player.supplyUsed -= specs[q.unit]?.supply ?? 0
+      }
     }
     for (const e of survivors) {
       if (e.attackTarget !== undefined && !alive.has(e.attackTarget)) delete e.attackTarget
