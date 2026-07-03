@@ -127,7 +127,13 @@ export function createClient(o: ClientOptions): Client {
 
   return {
     start() {
-      for (let t = 0; t < DELAY; t++) sendFrame(t) // nothing a player did can execute before DELAY
+      // Seed turns 0..DELAY-1 with literal empty frames — never the local input source. Nothing
+      // a player did can execute before the delay window; consulting local() here would let an
+      // early click or script bypass the lockstep input-latency contract.
+      for (let t = 0; t < DELAY; t++) {
+        if (o.maxTurn !== undefined && t > o.maxTurn) continue
+        o.send({ playerId: o.playerId, executeTurn: t, seq: 0, commands: [] })
+      }
     },
     onPacket(packet) {
       const commands = packet.frames.flatMap((f) => f.commands)

@@ -54,6 +54,32 @@ describe('Gate 5 — lockstep multiplayer', () => {
     expect(relay.desyncedAt).toBeNull() // checksums at 32/64/96 all agreed
   })
 
+  it('input aimed at the seed window (turns 0..DELAY-1) never executes — empty frames only', () => {
+    // A hostile/buggy input source with commands for turns 0 and 1 must be ignored: start()
+    // seeds literal empty frames and never consults local() before the delay window.
+    const relay = new Relay(2)
+    const clients: Client[] = []
+    for (const pid of [0, 1]) {
+      const client = createClient({
+        playerId: pid,
+        initial: initialState(7),
+        send: (f) => relay.submit(f),
+        local: (_s, turn) =>
+          pid === 0 && turn < DELAY
+            ? [{ type: 'MOVE', playerId: 0, seq: 0, unitIds: [1], payload: { x: fromInt(9), y: fromInt(9) } }]
+            : [],
+        maxTurn: 10,
+      })
+      relay.connect(pid, (p) => client.onPacket(p))
+      clients.push(client)
+    }
+    for (const c of clients) c.start()
+    const scout = clients[0].state.entities.find((e) => e.id === 1)!
+    expect(scout.x).toBe(fromInt(1)) // never moved — the early order was never broadcast
+    expect(scout.target).toBeUndefined()
+    expect(clients[0].hashes.get(10)).toBe(clients[1].hashes.get(10))
+  })
+
   it('a deliberately corrupted client is caught at the first checksum exchange', () => {
     // Client B silently corrupts one hp at tick 10 — a state-level desync with no bad command.
     const corrupt = (s: State, c: Command[]): State => {
