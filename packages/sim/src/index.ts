@@ -13,6 +13,7 @@ import type { GameData } from './data'
 import { DEFAULT_DATA } from './data'
 import { seedRng } from './rng'
 import { type Fixed, fromInt } from './fixed'
+import { step } from './step'
 
 /**
  * A fresh world: open 32×32 map, two players, one player-0 scout at (1,1) so a queued MOVE has
@@ -34,6 +35,17 @@ export function initialState(seed: number, data: GameData = DEFAULT_DATA): State
     map: { w, h, flags: new Array(w * h).fill(TILE_PASSABLE) },
     data,
   }
+}
+
+/**
+ * Replay: fold a recorded per-tick command log over an initial state. Because the sim is a pure
+ * reducer, this reproduces a full match byte-for-byte — the first of the free tools determinism
+ * buys (CONSTITUTION corollary).
+ */
+export function replay(initial: State, log: import('./command-types').Command[][]): State {
+  let s = initial
+  for (const cmds of log) s = step(s, cmds)
+  return s
 }
 
 /**
