@@ -1,0 +1,20 @@
+{
+  "name": "rts-proto",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "test": "vitest run packages",
+    "test:all": "vitest run",
+    "gate:1": "node scripts/gates/gate1.mjs",
+    "gate:2": "node scripts/gates/gate2.mjs",
+    "gate:3": "node scripts/gates/gate3.mjs",
+    "gate:4": "node scripts/gates/gate4.mjs",
+    "gate:5": "node scripts/gates/gate5.mjs",
+    "gates:all": "node scripts/gates/all.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.9"
+  }
+}
