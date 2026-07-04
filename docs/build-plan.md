@@ -131,6 +131,5 @@ explanation? That judgment is the point of the gate and stays out of any goal co
 
 ## Aggregate
 
-`npm run gates:all` runs the gates in order and prints `GATE N PASS` per gate plus a final
+`npm run gates:all` runs gate:1..6 in order and prints `GATE N PASS` per gate plus a final
 `ALL GATES PASS`. That final line is the single measurable end state for a full-campaign goal.
-(Currently gate:1..5; gate:6 joins the loop as part of its own acceptance.)
