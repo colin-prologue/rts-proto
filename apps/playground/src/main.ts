@@ -53,8 +53,10 @@ interface FlybyText {
 }
 const flybyTexts: FlybyText[] = []
 
-function spawnFlybys(events: SimEvent[], next: State) {
-  const positions = interpolatePositions(next, next, 0)
+// Anchor flybys from the PRE-step state: a lethal hit's target is gone from the post-step
+// entities, and the killing blow is exactly the number a viewer most needs to see.
+function spawnFlybys(events: SimEvent[], preStep: State) {
+  const positions = interpolatePositions(preStep, preStep, 0)
   for (const f of flybysFrom(events, positions)) {
     const [sx, sy] = proj.worldToScreen(f.x, f.y)
     const node = new Text({
@@ -173,7 +175,7 @@ if (replayName) {
     prev = next
     next = step(next, file.log[turn] ?? [], events)
     turn++
-    spawnFlybys(events, next)
+    spawnFlybys(events, prev)
     return true
   }
 
@@ -234,7 +236,7 @@ if (replayName) {
       prev = next
       next = step(next, pending, events)
       pending = []
-      spawnFlybys(events, next)
+      spawnFlybys(events, prev)
       acc -= TICK_MS
     }
     drawWorld(next, interpolatePositions(prev, next, acc / TICK_MS), selected)
