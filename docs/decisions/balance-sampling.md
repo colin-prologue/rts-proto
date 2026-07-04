@@ -1,7 +1,8 @@
 # Decision: balance sampling — where win-rate variance comes from
 
-**Status:** proposed (ratify before or during the Gate 7 run — flip to decided, extending the
-why, or replace with a different choice and record the reasoning).
+**Status:** decided (ratified 2026-07-04, ahead of the Gate 7 run, after the prior-art review
+below confirmed the era's games treated in-sim randomness as a design feature, never a
+measurement tool). Revisit only with a replacement record — the trigger is written below.
 
 ## Problem
 
@@ -11,7 +12,7 @@ consumed). So "win rate over 1000 seeded runs" measures nothing until something 
 What varies, and where that variation enters, is a real fork: each option prices differently
 against the constitution and the committed goldens.
 
-## Choice (proposed)
+## Choice
 
 **Seeded setup jitter, sides swapped per seed; the sim untouched.**
 
@@ -27,6 +28,11 @@ against the constitution and the committed goldens.
   rather than silently distorting the rates.
 - `step()` is not modified. Every previously committed golden must still match — this gate builds
   a measurement instrument, not a game change.
+- The report surfaces **distinct-outcome cardinality** (count of unique per-run `endHash`
+  values). Known limitation of sampling a fully deterministic sim through setup jitter: the
+  outcome distribution can be lumpy — a "62% win rate" might really be two of three geometry
+  classes favoring one comp. Publishing the cardinality makes a lumpy distribution visible
+  instead of letting it hide inside a smooth-looking rate; interpreting it stays a human call.
 
 ## Why not draw variance from `state.rng` inside the sim
 

@@ -154,7 +154,8 @@ Pieces:
   [--seed S]` (default N=1000): each run goes to elimination or a tick cap (draw), then a
   human-readable table plus a serialized report — per-run rows `{ seed, orientation, winner,
   ticks, endHash }` and an aggregate `{ wins, draws, win rate, per-orientation split, mean
-  duration }`.
+  duration, distinct-outcome count }` (the last is the lumpy-distribution guard from the
+  balance-sampling record: it exposes when a rate rests on only a few geometry classes).
 - **Replay export.** Any run row exports as a Gate 6 replay file (`--replay <run>`) — every
   statistic in the report is watchable in the viewer.
 
