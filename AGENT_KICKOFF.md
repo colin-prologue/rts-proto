@@ -149,6 +149,10 @@ the design, but the taste call stays yours.
 
 The determinism you just locked hands you three tools for free — replays (Gate 6), the headless
 balance harness (Gate 7), and one command interface for humans and AI (in place since Gate 4).
-Those are where the actual design iteration happens. Once gate 7 is green, point goals at design
-questions themselves, not infrastructure (e.g. "grunt-vs-archer sits within 45–55% over 1000
-seeded runs at default data, report output in the transcript").
+Those are where the actual design iteration happens.
+
+What comes next is **not tracked in this file**: the forward queue — candidate gates, design
+debts, findings — lives in the repo's GitHub issues (labels `roadmap` / `gate-candidate` /
+`design-debt` / `blocked`), per CLAUDE.md. An issue becomes the next gate via a planning commit,
+gets its goal string added here at that moment, and closes when the gate merges. This file and
+`docs/build-plan.md` only ever describe gates that exist.
