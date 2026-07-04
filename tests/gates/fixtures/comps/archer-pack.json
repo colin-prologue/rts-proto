@@ -1,0 +1,4 @@
+{
+  "name": "archer-pack",
+  "units": [{ "type": "archer", "count": 5 }]
+}

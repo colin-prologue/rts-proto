@@ -1,0 +1,7 @@
+{
+  "name": "mixed-squad",
+  "units": [
+    { "type": "grunt", "count": 3 },
+    { "type": "archer", "count": 2 }
+  ]
+}
