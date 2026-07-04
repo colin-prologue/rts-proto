@@ -127,9 +127,64 @@ Pieces:
 who is winning and why? Are damage numbers, production, and income readable at 1× speed without
 explanation? That judgment is the point of the gate and stays out of any goal condition.
 
+## Gate 7 — Headless balance harness (make the sim measurable)
+
+The second post-campaign tool from the determinism corollary: comp-vs-comp win rates at max
+speed, no renderer. Purpose: turn "is grunt/archer balanced" from a debate into a number, and
+close the tuning loop Gate 6 opened — run a thousand matches, read the rate, export any single
+run into the replay viewer, edit a data row, run again.
+
+One design problem is named up front, because it decides everything: **today the seed changes no
+outcome.** Nothing in the sim draws from `state.rng`, so N runs of one matchup are N copies of
+one match, and a "win rate" over them is vacuous. Where sample variance comes from is the fork
+ratified in `docs/decisions/balance-sampling.md` — proposed: seeded spawn jitter at scenario
+construction in the harness, each seed played in both orientations, `step()` untouched. Variance
+is a property of the *sampling*, not a change to the *game*: no committed golden may move.
+
+Pieces:
+
+- **Comp fixtures.** A comp = a named JSON fixture (unit types and counts), data not code — the
+  Gate 3 rule again: adding a comp is adding a file.
+- **Sampling model.** Per `docs/decisions/balance-sampling.md`: a run is (matchup, seed,
+  orientation); run seeds derive from one base seed by a pure integer mix; bounded per-unit spawn
+  offsets are generated from the run seed *outside* the sim; each seed is played with sides
+  swapped so first-actor/positional bias cancels out of the comp comparison and surfaces in the
+  report instead of hiding in it.
+- **Harness CLI.** `apps/headless` grows `npm run balance -- <compA> <compB> [--runs N]
+  [--seed S]` (default N=1000): each run goes to elimination or a tick cap (draw), then a
+  human-readable table plus a serialized report — per-run rows `{ seed, orientation, winner,
+  ticks, endHash }` and an aggregate `{ wins, draws, win rate, per-orientation split, mean
+  duration }`.
+- **Replay export.** Any run row exports as a Gate 6 replay file (`--replay <run>`) — every
+  statistic in the report is watchable in the viewer.
+
+**Acceptance (gate:7 exits 0):**
+- Report determinism: the gate's fixed matchup over the committed seed set, run twice, serializes
+  byte-identically and hashes to a committed golden.
+- Sim untouched: every previously committed golden still matches — variance lives in setup, never
+  in `step()`.
+- Seeds have teeth: across the committed seed set (both orientations) the designated close
+  matchup yields at least one win for *each* comp, and the per-run (winner, ticks) outcomes are
+  not all identical — jitter demonstrably reaches outcomes.
+- Aggregate data-flip: overriding one damage-table cell flips which comp the report favors
+  (Gate 3's live-tunability proof, population version).
+- Comp = data: the harness reports on a comp loaded from a new fixture file with no sim or
+  harness code change.
+- Round-trip: an exported run re-simulates to the `endHash` recorded in its report row.
+- `docs/decisions/balance-sampling.md` is ratified (Status: decided).
+- gate:7 joins `gates:all` and the final line reads `ALL GATES PASS` again.
+
+**Human review:** run two comps you believe are close at N=1000 — does the number match the
+intuition you built watching replays? Export two or three of the minority side's wins: are they
+won for interesting reasons (positioning, focus) or degenerate ones (pathing jams, leashing)?
+Is the whole loop — edit a row, re-run, re-watch — a five-minute experiment? And read the
+per-orientation split: a systematic first-actor bias there is a real sim finding to weigh,
+not a harness bug.
+
 ---
 
 ## Aggregate
 
-`npm run gates:all` runs gate:1..6 in order and prints `GATE N PASS` per gate plus a final
+`npm run gates:all` runs the gates in order and prints `GATE N PASS` per gate plus a final
 `ALL GATES PASS`. That final line is the single measurable end state for a full-campaign goal.
+(Currently gate:1..6; gate:7 joins the loop as part of its own acceptance.)

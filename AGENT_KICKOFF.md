@@ -116,6 +116,27 @@ by implementations of the contracts described in their comments.
 The viewer's *legibility* — flybys, statuses, queue pips readable by a non-author at 1× speed —
 is the Gate 6 human-review item and deliberately not in the goal condition (see build-plan).
 
+### Gate 7 (post-campaign) — headless balance harness
+
+```
+/goal `npm run gate:7` exits 0 and prints "GATE 7 PASS", and `npm run gates:all` now includes
+gate 7 and prints "GATE 1 PASS" through "GATE 7 PASS" plus "ALL GATES PASS": the balance report
+over the committed seed set serializes byte-identically across two invocations and hashes to the
+committed golden; no previously committed golden moves — packages/sim behavior is untouched, and
+variance comes from seeded setup jitter per docs/decisions/balance-sampling.md, which carries
+Status: decided; across the committed seeds the designated close matchup yields at least one win
+for each comp and non-identical per-run (winner, ticks) outcomes; overriding one damage-table
+cell flips the favored comp in the aggregate; a comp loads from a new JSON fixture with no sim or
+harness code change; an exported run re-simulates to the endHash recorded in its report row. Do
+not weaken any existing gate, test, or golden; placeholder expect.fail contracts in gate7 may
+only be replaced by implementations of the contracts described in their comments; do not draw
+variance from Math.random, the wall clock, or any change to step().
+```
+
+Whether the *numbers are believable* — rates matching the intuition built in the replay viewer,
+minority-side wins won for interesting reasons, the edit-row → re-run → re-watch loop staying a
+five-minute experiment — is the Gate 7 human-review item and stays out of the goal condition.
+
 ## Why the goal excludes "is it fun"
 
 The evaluator can't judge feel — it reads text, runs nothing. "Fun / responsive / interesting
@@ -126,7 +147,8 @@ the design, but the taste call stays yours.
 
 ## After the gates
 
-The determinism you just locked hands you three tools for free — replays, a headless balance harness
-(comp-vs-comp win rates over thousands of runs), and one command interface for humans and AI. Those
-are where the actual design iteration happens. Point the next goals at *those* (e.g. "the balance
-harness reports win rates for 3 named comps over 1000 seeded runs, output in transcript").
+The determinism you just locked hands you three tools for free — replays (Gate 6), the headless
+balance harness (Gate 7), and one command interface for humans and AI (in place since Gate 4).
+Those are where the actual design iteration happens. Once gate 7 is green, point goals at design
+questions themselves, not infrastructure (e.g. "grunt-vs-archer sits within 45–55% over 1000
+seeded runs at default data, report output in the transcript").
