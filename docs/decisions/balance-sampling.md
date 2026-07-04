@@ -47,3 +47,41 @@ Rejected for now, deliberately:
   future axis, with its own sampling story.
 - **Varying the AI policy per run:** measures the bot, not the comps. Comp balance wants a fixed
   engagement policy across every sample.
+
+## Prior art — what the era's lockstep games did
+
+Every reference game ran the same architecture we do (synchronized simulations exchanging only
+commands, RNG as seeded shared state — the 1500-Archers model), and every one of them put *some*
+randomness inside the sim, always as a **game-design feature**, never as a measurement tool:
+
+- **StarCraft: Brood War** — deterministic damage amounts, but every ranged attack has a 1/256
+  base miss chance, and attacks uphill or into cover hit only 136/256 (~53%). Tiny baseline
+  noise; large, *positional* randomness that makes terrain a strategic resource.
+- **Command & Conquer (Tiberian Dawn/Red Alert, GPL source)** — deterministic warhead damage;
+  projectiles flagged `IsInaccurate` scatter their impact point via the synced `Random_Pick`.
+  Randomness is per-weapon data, bounded by distance. OpenRA's reimplementation makes the
+  discipline explicit: a synced gameplay RNG and a separate, deliberately *unsynced*
+  `CosmeticRandom` for visuals.
+- **Warcraft III** — the most random: damage = base + R dice of M sides, per-unit data (heroes
+  roll 2 dice keyed to primary stat). Combat outcomes have real spread by design.
+- **Age of Empires II** — closest to us today: no damage dice; ranged units carry an accuracy
+  percentage (an in-sim roll) plus deterministic projectile ballistics that miss moving targets
+  geometrically. Melee combat is effectively deterministic.
+
+Two takeaways shape this record. First: in-sim randomness in these games is always *seeded,
+synced, data-driven, and bounded* — exactly what Constitution III already provides for — and it
+exists because designers wanted its gameplay effects (terrain mattering, softened focus-fire
+alpha, organic-feeling fights), not because testers needed variance. Second: none of these
+studios measured balance by Monte Carlo — StarCraft was balanced by mass playtesting (whole-
+company playtest days) and years of patches. A headless win-rate harness is a modern luxury our
+determinism buys; the era offers no precedent for letting the *instrument* dictate sim changes.
+
+**Revisit trigger:** if the design later wants what the era's games got from in-sim randomness
+(miss chances, scatter, damage dice as unit data), adopt it as its own game-design record with
+deliberately re-recorded goldens. The harness needs no change — the run seed already flows into
+`ReplayFile.seed` and thus `state.rng`, so in-sim draws would simply become a second variance
+source under the same sampling model.
+
+Sources: the 1500-Archers paper (Bettner/Terrano, GDC 2001); Liquipedia BW "Damage" and the
+classic Battle.net high-ground page; the C&C Remastered GPL source (`TIBERIANDAWN/BULLET.CPP`);
+OpenRA `Game.cs`; Liquipedia Warcraft "Attack Damage"; AoE2 accuracy guides (UGC/aoe2database).
