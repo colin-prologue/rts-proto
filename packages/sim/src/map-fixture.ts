@@ -73,3 +73,30 @@ export function parseMap(fixture: MapFixture): ParsedMap {
   }
   return { name: fixture.name, map: { w, h, flags }, spawns: [spawns[0], spawns[1]] }
 }
+
+/**
+ * Nearest passable tile to (x, y): the point is clamped into bounds, then Chebyshev rings grow
+ * outward, scanned in fixed row-major order — deterministic, the same tile for the same map
+ * forever. Throws (loudly) if the map has no passable tile at all. Used wherever a fixed or
+ * jittered position must land on ground a unit can legally occupy (the harness formation
+ * spill, the default scout on custom maps).
+ */
+export function nearestPassable(map: WorldMap, x: number, y: number): { x: number; y: number } {
+  const clamp = (v: number, hi: number) => Math.min(hi, Math.max(0, v))
+  x = clamp(x, map.w - 1)
+  y = clamp(y, map.h - 1)
+  const passable = (px: number, py: number) => (map.flags[py * map.w + px] & TILE_PASSABLE) !== 0
+  if (passable(x, y)) return { x, y }
+  for (let r = 1; r < Math.max(map.w, map.h); r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue // ring cells only
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < 0 || ny < 0 || nx >= map.w || ny >= map.h) continue
+        if (passable(nx, ny)) return { x: nx, y: ny }
+      }
+    }
+  }
+  throw new Error('nearestPassable: the map has no passable tile')
+}

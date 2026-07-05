@@ -12,6 +12,7 @@ export * from './map-fixture'
 
 import type { State, WorldMap } from './types'
 import { TILE_PASSABLE } from './types'
+import { nearestPassable } from './map-fixture'
 import type { GameData } from './data'
 import { DEFAULT_DATA } from './data'
 import { seedRng } from './rng'
@@ -27,10 +28,14 @@ import { step } from './step'
 export function initialState(seed: number, data: GameData = DEFAULT_DATA, map?: WorldMap): State {
   const w = 32
   const h = 32
+  // On a custom map the scout's home tile may be a wall or out of bounds — nudge it to the
+  // nearest passable tile so no world ever starts with an entity inside terrain. The open
+  // default map keeps the literal (1,1), so every committed golden stays byte-identical.
+  const at = map ? nearestPassable(map, 1, 1) : { x: 1, y: 1 }
   return {
     tick: 0,
     rng: seedRng(seed),
-    entities: [{ id: 1, type: 'scout', owner: 0, x: fromInt(1), y: fromInt(1), hp: data.units.scout.hp }],
+    entities: [{ id: 1, type: 'scout', owner: 0, x: fromInt(at.x), y: fromInt(at.y), hp: data.units.scout.hp }],
     players: [
       { id: 0, minerals: 200, supplyUsed: 1 }, // the starting scout holds 1 supply
       { id: 1, minerals: 200, supplyUsed: 0 },

@@ -20,9 +20,9 @@ import {
   rngInt,
   rngU32,
   parseMap,
+  nearestPassable,
   DEFAULT_DATA,
   REPLAY_VERSION,
-  TILE_PASSABLE,
   type GameData,
   type State,
   type Command,
@@ -113,30 +113,6 @@ const ANCHORS = [
 const JITTER = 2 // max spawn offset per axis, in tiles
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
-const passableAt = (map: WorldMap, x: number, y: number) => (map.flags[y * map.w + x] & TILE_PASSABLE) !== 0
-
-/**
- * Nudge a formation slot onto passable ground: if the jittered tile is a wall, take the nearest
- * passable tile by growing Chebyshev rings, scanned in fixed row-major order — deterministic,
- * same tile for the same seed forever. parseMap guarantees spawn tiles are passable, so the
- * search always terminates on any map a fixture can express.
- */
-function placeOnPassable(map: WorldMap, x: number, y: number): { x: number; y: number } {
-  if (passableAt(map, x, y)) return { x, y }
-  for (let r = 1; r < Math.max(map.w, map.h); r++) {
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue // ring cells only
-        const nx = x + dx
-        const ny = y + dy
-        if (nx < 0 || ny < 0 || nx >= map.w || ny >= map.h) continue
-        if (passableAt(map, nx, ny)) return { x: nx, y: ny }
-      }
-    }
-  }
-  throw new Error('placeOnPassable: no passable tile on the map')
-}
-
 /**
  * Setup rows for one run. Jitter is drawn from the sim's own PRNG seeded by the run seed —
  * per slot, in fixed order (player 0's units first) — so the same seed always builds the same
@@ -160,8 +136,13 @@ export function makeSetup(
         dir: s.x < map.spawns[1 - i].x ? -1 : s.x > map.spawns[1 - i].x ? 1 : ANCHORS[i].dir,
       }))
     : ANCHORS
-  const maxX = map ? map.map.w - 3 : 29
-  const maxY = map ? map.map.h - 3 : 29
+  // The default arena keeps its historical interior margin (the gate 7 golden pins it). A map
+  // path clamps to the map's TRUE bounds — the fixture's spawns are what the designer declared,
+  // and a small or edge-anchored map must not have its formations dragged into a margin it
+  // never asked for; the passability nudge below handles whatever the edge clamp lands on.
+  const minXY = map ? 0 : 2
+  const maxX = map ? map.map.w - 1 : 29
+  const maxY = map ? map.map.h - 1 : 29
   let rng: Rng = seedRng(seed)
   const rows: ReplaySetupRow[] = []
   for (let owner = 0; owner <= 1; owner++) {
@@ -175,10 +156,10 @@ export function makeSetup(
         ;[dx, rng] = rngInt(rng, 2 * JITTER + 1)
         ;[dy, rng] = rngInt(rng, 2 * JITTER + 1)
         const at = {
-          x: clamp(anchor.x + anchor.dir * col + (dx - JITTER), 2, maxX),
-          y: clamp(anchor.y + row + (dy - JITTER), 2, maxY),
+          x: clamp(anchor.x + anchor.dir * col + (dx - JITTER), minXY, maxX),
+          y: clamp(anchor.y + row + (dy - JITTER), minXY, maxY),
         }
-        const placed = map ? placeOnPassable(map.map, at.x, at.y) : at
+        const placed = map ? nearestPassable(map.map, at.x, at.y) : at
         rows.push({ type: u.type, owner, x: placed.x, y: placed.y })
         slot++
       }

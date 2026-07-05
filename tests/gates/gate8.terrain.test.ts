@@ -10,6 +10,7 @@ import {
   fromInt,
   floorToInt,
   buildReplayInitial,
+  parseMap,
   TILE_PASSABLE,
   REPLAY_VERSION,
   type Command,
@@ -23,6 +24,7 @@ import {
   loadComp,
   runBalance,
   exportRun,
+  makeSetup,
   serializeReport,
   reportHash,
   sideSkew,
@@ -122,6 +124,34 @@ describe('Gate 8 — maps & terrain as data', () => {
     const r = runBalance(comp('grunt-pack'), comp('archer-pack'), { baseSeed: 7, seedCount: 4, map: second })
     expect(r.matchup.map).toBe('lopsided-gate')
     expect(r.runs.length).toBe(8)
+  })
+
+  it('small and edge-anchored maps keep formations inside their own bounds, on passable tiles', () => {
+    // A valid fixture smaller than the default arena's interior margin must be honored as
+    // declared: setup positions clamp to the map's true bounds and nudge onto passable tiles —
+    // never dragged into a hard-coded [2, w-3] interior the map cannot support (PR #12 review).
+    const tiny = parseMap({
+      name: 'tiny-arena',
+      tiles: ['......', '.#..#.', '......', '......', '......'],
+      spawns: [
+        { x: 0, y: 2 },
+        { x: 5, y: 2 },
+      ],
+    })
+    const setup = makeSetup(comp('grunt-pack'), comp('grunt-pack'), 12345, 0, tiny)
+    expect(setup.length).toBe(14)
+    for (const row of setup) {
+      expect(row.x).toBeGreaterThanOrEqual(0)
+      expect(row.x).toBeLessThan(6)
+      expect(row.y).toBeGreaterThanOrEqual(0)
+      expect(row.y).toBeLessThan(5)
+      expect(tiny.map.flags[row.y * 6 + row.x] & TILE_PASSABLE).toBe(TILE_PASSABLE)
+    }
+    // both declared anchors are actually used: each side's rows cluster around its own spawn
+    const side0 = setup.slice(0, 7)
+    const side1 = setup.slice(7)
+    expect(Math.min(...side0.map((r) => r.x))).toBeLessThanOrEqual(1)
+    expect(Math.max(...side1.map((r) => r.x))).toBeGreaterThanOrEqual(4)
   })
 
   it('terrain has teeth: a unit ordered through a choke wall never enters it', () => {
