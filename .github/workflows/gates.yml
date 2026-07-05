@@ -1,0 +1,72 @@
+# Mechanical merge safety for parallel PR lanes. pull_request checks out the MERGE ref, so this
+# tests the merged result, not the branch in isolation — the green-in-isolation / red-on-main
+# failure class. Branch protection is unavailable on this plan, so the check is advisory: the
+# red X at merge time is the enforcement. The push job re-validates main after every merge, and
+# revalidate-open-prs closes the stale-green hole (PR #15 review): `synchronize` fires only on
+# head-branch updates, never base updates, and a re-run reuses the old event SHA — so when main
+# advances, every still-open PR is re-tested merged against the NEW main, with the verdict
+# posted as a `gates-vs-main` status on the PR head where the merge decision happens.
+name: gates
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run gates:all
+
+  # Runs the workflow definition from MAIN (not the PR), but npm scripts from each merged tree
+  # do execute with a statuses:write token — acceptable in this private, no-fork repo; revisit
+  # before accepting fork PRs. PR heads are fetched by number (validated integers), never by
+  # branch name, so no untrusted strings reach the shell.
+  revalidate-open-prs:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: re-test each open PR merged against the new main
+        run: |
+          set -u
+          git config user.name gates-bot
+          git config user.email gates-bot@users.noreply.github.com
+          short_main=$(git rev-parse --short "$GITHUB_SHA")
+          for n in $(gh pr list --state open --json number --jq '.[].number'); do
+            git fetch -q origin "pull/$n/head"
+            head_sha=$(git rev-parse FETCH_HEAD)
+            git checkout -q -B revalidate "$GITHUB_SHA"
+            post() { gh api "repos/$GITHUB_REPOSITORY/statuses/$head_sha" \
+              -f state="$1" -f context=gates-vs-main -f description="$2" --silent; }
+            if ! git merge -q --no-edit "$head_sha"; then
+              git merge --abort || true
+              post failure "merge conflict with main @ $short_main"
+              continue
+            fi
+            if npm ci --silent && npm test && npm run gates:all; then
+              post success "gates pass merged with main @ $short_main"
+            else
+              post failure "gates fail merged with main @ $short_main"
+            fi
+          done
