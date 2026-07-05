@@ -1,6 +1,10 @@
 # Decision: maps as data — fixtures, replay versioning, and the high-ground line
 
-**Status:** proposed (ratify before the Gate 8 run). Revisit only with a replacement record.
+**Status:** decided (ratified 2026-07-05 at the start of the Gate 8 run, after maintainer review
+of the authoring story: the ASCII rows survive as the *storage* format only — diffable, purely
+parseable — with hand-authoring bootstrap-only and the web map editor (issue #11) as the
+authoring surface; the image-authoring alternative was weighed and is recorded below). Revisit
+only with a replacement record.
 
 ## Problem
 
