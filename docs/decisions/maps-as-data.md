@@ -13,7 +13,12 @@ ground ships now.
 
 ## Choice
 
-**1. Maps are data fixtures, parsed pure.** A map is a JSON file:
+**1. Maps are data fixtures, parsed pure.** The JSON below is the **storage format**, chosen
+for PR diffability (one tile row per line — a map change reads as changed rows) and a pure
+parse — it is *not* the intended authoring surface. Hand-editing these rows is bootstrap-only,
+to unblock Gate 8 development, and goes away as soon as the web map editor (issue #11) is
+online: the editor reads and writes this exact format, so the fixture stays the single source
+of truth and the editor is a client of it, never a second format. A map is a JSON file:
 
 ```json
 {
@@ -57,6 +62,13 @@ Gate 8 ships **passability terrain only** (chokes, walls, arenas). Movement alre
 
 ## Rejected
 
+- **Image authoring (fixed-palette PNG painted in GIMP or similar):** seriously considered —
+  painting beats text-editing for layout, and layers tempt as metadata carriers. Rejected
+  because it trades text diffs for binary blobs and imports a real determinism hazard class:
+  browser canvas decode is color-managed and not byte-reliable across browsers, editors
+  anti-alias off-palette pixels, and Node would grow a decoder dependency. The want behind it
+  (a visual authoring surface with symmetry tooling) is met by the web map editor (issue #11)
+  over this same diffable text format instead.
 - **Map by fixture-name reference in replays:** name-to-content drift silently changes the
   reconstructed world; the viewer would need the fixture tree at hand; replays stop being
   self-contained artifacts.

@@ -197,7 +197,9 @@ Pieces:
 - **Map fixtures.** `{ name, tiles, spawns }`: ASCII tile rows under a fixed legend (`.`
   passable, `#` impassable), a safe-token name, and exactly two muster anchors. Parsed by a
   pure `parseMap` in `packages/sim` (no fs — file I/O stays in apps and tests, the comp split).
-  `initialState` gains an optional map argument defaulting to the open 32×32.
+  `initialState` gains an optional map argument defaulting to the open 32×32. The rows are the
+  *storage* format (diffable); hand-editing them is bootstrap-only — the authoring surface is
+  the web map editor (issue #11), which reads and writes this same format.
 - **Replay format v2.** Per `docs/decisions/maps-as-data.md`: `v` absent = v1 = the default
   open map (today's files stay valid); `v: 2` embeds the runtime map `{ w, h, flags }` inline —
   replays stay self-contained ("reconstruct a scenario from nothing"; the map is hashed state,
