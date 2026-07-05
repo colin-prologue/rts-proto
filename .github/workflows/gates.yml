@@ -1,0 +1,23 @@
+# Mechanical merge safety for parallel PR lanes. pull_request checks out the MERGE ref, so this
+# tests the merged result, not the branch in isolation — the green-in-isolation / red-on-main
+# failure class. Branch protection is unavailable on this plan, so the check is advisory: the
+# red X at merge time is the enforcement. The push job re-validates main after every merge so a
+# stale-approval merge is caught within minutes, not at the next PR.
+name: gates
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run gates:all
