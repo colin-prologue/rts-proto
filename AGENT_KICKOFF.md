@@ -153,6 +153,8 @@ Those are where the actual design iteration happens.
 
 What comes next is **not tracked in this file**: the forward queue — candidate gates, design
 debts, findings — lives in the repo's GitHub issues (labels `roadmap` / `gate-candidate` /
-`design-debt` / `blocked`), per CLAUDE.md. An issue becomes the next gate via a planning commit,
-gets its goal string added here at that moment, and closes when the gate merges. This file and
-`docs/build-plan.md` only ever describe gates that exist.
+`design-debt` / `blocked`), per CLAUDE.md. An issue becomes the next gate via a planning commit
+and carries its own `/goal` string in a `## Goal` section of its body from that moment — this
+file stops accumulating goal strings after Gate 7 (the ones above are the historical record of
+the campaign). The issue closes when its gate merges. This file and `docs/build-plan.md` only
+ever describe gates that exist.
