@@ -104,6 +104,39 @@ export interface QueuePips {
   headProgress: number // 0..1 completion of the item in production
 }
 
+// ---- Terrain view-model (Gate 8) — pure, testable without a canvas. -------------------------
+
+export interface TerrainTile {
+  x: number // tile grid coords (integer)
+  y: number
+  sx: number // projected screen anchor at the tile center
+  sy: number
+}
+
+// Mirrors TILE_PASSABLE (bit 0) from @rts/sim types.ts — a const, so not on the value-import
+// allowlist; the render side only ever reads the bit.
+const PASSABLE_BIT = 1
+
+/**
+ * Draw entries for every impassable tile: the open floor is the background, walls are what a
+ * viewer must see. Anchored at the tile center — a unit at continuous (x, y) occupies the tile
+ * (floor(x), floor(y)), so the center is the visual mass of the blocked cell.
+ */
+export function terrainTiles(
+  map: { w: number; h: number; flags: number[] },
+  proj: Projection
+): TerrainTile[] {
+  const out: TerrainTile[] = []
+  for (let y = 0; y < map.h; y++) {
+    for (let x = 0; x < map.w; x++) {
+      if ((map.flags[y * map.w + x] & PASSABLE_BIT) !== 0) continue
+      const [sx, sy] = proj.worldToScreen(x + 0.5, y + 0.5)
+      out.push({ x, y, sx, sy })
+    }
+  }
+  return out
+}
+
 /** Production-queue badge model for a building. */
 export function queuePips(
   queue: { unit: string; remaining: number }[] | undefined,

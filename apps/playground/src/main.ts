@@ -21,7 +21,9 @@ import {
   flybysFrom,
   hpFraction,
   queuePips,
+  terrainTiles,
   TILE_H,
+  TILE_W,
 } from '@rts/render'
 
 const TICK_MS = 100 // 10 Hz sim, per architecture; render interpolates at display rate
@@ -39,10 +41,23 @@ document.body.appendChild(app.canvas)
 const world = new Container()
 world.position.set(window.innerWidth / 2, 120)
 app.stage.addChild(world)
+const terrainLayer = new Graphics()
 const unitLayer = new Graphics()
 const flybyLayer = new Container()
 const ackLayer = new Graphics()
-world.addChild(unitLayer, flybyLayer, ackLayer)
+world.addChild(terrainLayer, unitLayer, flybyLayer, ackLayer)
+
+// Terrain is static per match — drawn once from the initial state's map (Gate 8: maps as data;
+// v2 replays embed theirs). Impassable tiles render as dark diamonds under the units.
+function drawTerrain(state: State) {
+  terrainLayer.clear()
+  for (const t of terrainTiles(state.map, proj)) {
+    terrainLayer
+      .poly([t.sx, t.sy - TILE_H / 2, t.sx + TILE_W / 2, t.sy, t.sx, t.sy + TILE_H / 2, t.sx - TILE_W / 2, t.sy])
+      .fill({ color: 0x3a3f46 })
+      .stroke({ color: 0x22262b, width: 1 })
+  }
+}
 
 // ---- shared drawing --------------------------------------------------------------------------
 
@@ -163,6 +178,7 @@ if (replayName) {
   const file = (await (await fetch(`/replays/${replayName}.json`)).json()) as ReplayFile
   let prev = buildReplayInitial(file)
   let next = prev
+  drawTerrain(prev)
   let turn = 0
   let speedIdx = 2 // 1x
   let paused = false
@@ -211,6 +227,7 @@ if (replayName) {
   // -------- live sandbox --------
   let prev: State = initialState(1)
   let next: State = step(prev, [])
+  drawTerrain(prev)
   let pending: Command[] = []
   let seq = 0
   const selected = new Set<number>([1])
