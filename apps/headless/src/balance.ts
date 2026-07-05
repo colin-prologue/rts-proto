@@ -33,11 +33,18 @@ export interface Comp {
   units: { type: string; count: number }[]
 }
 
+// Comp names flow into report matchup labels and exported replay filenames — keep them to a
+// safe token so a fixture can never smuggle path separators into a write path.
+const COMP_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+
 /** A comp is a data fixture — adding one is adding a JSON file, never code. */
 export function loadComp(path: string): Comp {
   const comp = JSON.parse(readFileSync(path, 'utf8')) as Comp
   if (!comp.name || !Array.isArray(comp.units) || comp.units.length === 0) {
     throw new Error(`${path}: a comp fixture needs { name, units: [{ type, count }] }`)
+  }
+  if (!COMP_NAME.test(comp.name)) {
+    throw new Error(`${path}: comp name "${comp.name}" must match ${COMP_NAME} (it becomes a filename)`)
   }
   return comp
 }
@@ -254,13 +261,23 @@ export const reportHash = (serialized: string): number => hashStr(hashInit(), se
  * Re-derive one run as a Gate 6 replay file: same seed, same setup, same logged commands, so
  * `replay(buildReplayInitial(file), file.log)` lands on the endHash its report row recorded —
  * every statistic in the report is watchable in the viewer.
+ *
+ * Refuses data-overridden runs: the replay format carries no data table, so the viewer would
+ * reconstruct the fight under DEFAULT_DATA and diverge from the report row. The watchable
+ * tuning loop is edit-the-data-source → re-run → re-watch; `opts.data` is for in-memory
+ * experiments (like the gate's flip check), which are not exportable by design.
  */
 export function exportRun(compA: Comp, compB: Comp, opts: BalanceOptions, run: number): ReplayFile {
+  if (opts.data !== undefined && opts.data !== DEFAULT_DATA) {
+    throw new Error(
+      'exportRun: replays cannot carry a data override (buildReplayInitial loads DEFAULT_DATA); ' +
+        'edit the data source instead to make a tuning run watchable'
+    )
+  }
   const seed = runSeed(opts.baseSeed, Math.floor(run / 2))
   const orientation = (run % 2) as 0 | 1
   const setup = makeSetup(compA, compB, seed, orientation)
   const slot0Count = unitCount(orientation === 0 ? compA : compB)
-  const data = opts.data ?? DEFAULT_DATA
-  const m = runMatch(seed, setup, slot0Count, data, opts.maxTicks ?? DEFAULT_MAX_TICKS)
+  const m = runMatch(seed, setup, slot0Count, DEFAULT_DATA, opts.maxTicks ?? DEFAULT_MAX_TICKS)
   return { name: `${compA.name}-vs-${compB.name}-run${run}`, seed, setup, log: m.log }
 }

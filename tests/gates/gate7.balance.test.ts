@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
+import { readFileSync, existsSync, writeFileSync, mkdirSync, mkdtempSync } from 'node:fs'
+import { resolve, dirname, join } from 'node:path'
+import { tmpdir } from 'node:os'
 import {
   initialState,
   spawn,
@@ -167,6 +168,33 @@ describe('Gate 7 — headless balance harness', () => {
       const end = replay(buildReplayInitial(file), file.log)
       expect(hashState(end) >>> 0).toBe(row.endHash)
     }
+  })
+
+  it('exportRun refuses data-overridden runs (replays cannot carry a table override)', () => {
+    // The ReplayFile format has no data field; the viewer reconstructs under DEFAULT_DATA, so a
+    // data-overridden export would silently diverge from its report row. Refusal is the contract.
+    const boosted: GameData = {
+      ...DEFAULT_DATA,
+      damageTable: {
+        ...DEFAULT_DATA.damageTable,
+        pierce: { ...DEFAULT_DATA.damageTable.pierce, light: 300 },
+      },
+    }
+    expect(() =>
+      exportRun(comp('grunt-pack'), comp('archer-pack'), { ...GATE_OPTS, data: boosted }, 0)
+    ).toThrow(/data override/)
+    // passing DEFAULT_DATA explicitly is fine — it is what the replay path loads
+    expect(() =>
+      exportRun(comp('grunt-pack'), comp('archer-pack'), { ...GATE_OPTS, data: DEFAULT_DATA }, 0)
+    ).not.toThrow()
+  })
+
+  it('loadComp rejects names that could escape a write path', () => {
+    // Comp names become replay filenames; a fixture must not smuggle path separators.
+    const dir = mkdtempSync(join(tmpdir(), 'rts-comp-'))
+    const evil = join(dir, 'evil.json')
+    writeFileSync(evil, JSON.stringify({ name: '../../escape', units: [{ type: 'grunt', count: 1 }] }))
+    expect(() => loadComp(evil)).toThrow(/must match/)
   })
 
   it('the balance-sampling decision record is ratified (not a proposal)', () => {
