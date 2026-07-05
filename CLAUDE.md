@@ -16,6 +16,12 @@ The first two things worth building for real are the **deterministic simulation 
 - **Spec-first, gate-by-gate.** Read `docs/architecture.md` and `docs/build-plan.md` before
   writing code. Implement one gate at a time, in order. Do not start a gate until the previous
   gate's check script exits 0.
+- **The roadmap lives in GitHub issues; the specs live here.** Candidate gates, design debts,
+  and findings are tracked as issues (labels: `roadmap`, `gate-candidate`, `design-debt`,
+  `blocked`) — that is the only forward queue, so it never drifts against prose. An issue
+  graduates by a planning commit (build-plan section + decision record + known-failing
+  contracts + goal string) and closes when its gate merges. `docs/build-plan.md` holds only
+  gates that have been specced this way — never future intentions.
 - **The invariants in `CONSTITUTION.md` are law.** They are what makes inputs-not-state work.
   If a change would violate one, stop and reconsider the design instead.
 - **Ratify open decisions with a decision record.** `docs/architecture.md` lists a few forks
