@@ -8,8 +8,9 @@ export * from './command-types'
 export * from './commands'
 export * from './step'
 export * from './replay-file'
+export * from './map-fixture'
 
-import type { State } from './types'
+import type { State, WorldMap } from './types'
 import { TILE_PASSABLE } from './types'
 import type { GameData } from './data'
 import { DEFAULT_DATA } from './data'
@@ -18,11 +19,12 @@ import { type Fixed, fromInt } from './fixed'
 import { step } from './step'
 
 /**
- * A fresh world: open 32×32 map, two players, one player-0 scout at (1,1) so a queued MOVE has
- * something to move. Scenarios and tests grow worlds from here with spawn().
+ * A fresh world: open 32×32 map (or a given one — maps are data, docs/decisions/maps-as-data.md),
+ * two players, one player-0 scout at (1,1) so a queued MOVE has something to move. Scenarios and
+ * tests grow worlds from here with spawn().
  * Entities are kept sorted by id — step() iterates in array order (CONSTITUTION IV).
  */
-export function initialState(seed: number, data: GameData = DEFAULT_DATA): State {
+export function initialState(seed: number, data: GameData = DEFAULT_DATA, map?: WorldMap): State {
   const w = 32
   const h = 32
   return {
@@ -34,7 +36,7 @@ export function initialState(seed: number, data: GameData = DEFAULT_DATA): State
       { id: 1, minerals: 200, supplyUsed: 0 },
     ],
     nextEntityId: 2,
-    map: { w, h, flags: new Array(w * h).fill(TILE_PASSABLE) },
+    map: map ?? { w, h, flags: new Array(w * h).fill(TILE_PASSABLE) },
     data,
   }
 }
