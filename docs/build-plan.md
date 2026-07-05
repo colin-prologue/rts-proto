@@ -241,10 +241,95 @@ fixture's per-side skew next to the default arena's: does the fairness number ma
 watching the replays tells you? That judgment — *is this map interesting, not just fair* — is
 the point of the gate and stays out of any goal condition.
 
+## Gate 9 — movement & collision (make engagements out of blob math)
+
+Combat today is blob-collision math: no unit collision, no group movement, and straight-line
+stepping the pathfinding record scoped as a placeholder. Mean Gate 7 match length is 19 ticks
+because armies interpenetrate into a single point of mutual annihilation. This gate makes
+movement real — flow fields behind the pathfinder interface promised in
+`docs/decisions/pathfinding.md`, tile-exclusive unit collision, and the movement-order fairness
+fix for issue #4 — so "how does a 40-unit army feel to move" becomes answerable.
+
+Issue #4 is deliberately folded in rather than fixed separately: both changes rewrite `step()`
+phase 4 and both move every committed golden, so the golden migration happens **once**.
+
+Two records are ratified with the planning commit: `docs/decisions/movement-fairness.md`
+(phase 4 computes all targeting and movement intents from a pre-movement snapshot, then
+applies them — the aim asymmetry is removed by construction, resolving #4) and
+`docs/decisions/unit-collision.md` (one entity per tile enforced at movement time, id-stable
+resolution, monotone flow-field alternates, arrival relaxation; the id-order contention
+advantage is the named, accepted weak point). Flow-field scope needs no new record —
+`docs/decisions/pathfinding.md` already ratified integer cost fields behind a pathfinder
+interface; the generator lands here (8-connected, Chebyshev-uniform integer costs to match the
+movement metric, no corner-cutting through diagonal gaps, fields cached per destination within
+one tick and never stored in state).
+
+Pieces:
+
+- **Pathfinder.** `packages/sim` grows the flow-field generator behind the promised interface;
+  the placeholder straight-line mover is retired. All field math is integer (BFS costs); the
+  gate-1 grep gate covers the new code automatically. A MOVE onto an impassable tile retargets
+  to the nearest passable tile (the existing `nearestPassable` rule); an unreachable
+  destination stops the unit.
+- **Fairness fix (#4).** Phase 4 becomes intent pass + application pass, both in stable id
+  order, intents computed against the pre-movement snapshot per the movement-fairness record.
+- **Collision.** Tile exclusivity per the unit-collision record: vacated tiles free within the
+  tick (columns flow), strictly-cost-decreasing alternates, arrival relaxation against
+  stationary blockers, spawn overlaps legal but never created by movement.
+- **Golden migration.** `step()` changes behavior, so **every committed golden moves**: gate 1,
+  gate 3 economy + combat, gate 4 match (the AI match plays out differently, so the
+  `gate4-match.json` replay fixture is re-recorded with it), the gate 7 report, and both gate 8
+  hashes, plus the checked-in demo replay exports. The re-record is **one dedicated commit**
+  whose message names the two behavior changes as the cause; no other commit may touch a
+  golden. Expected numbers on the gate 7/8 fixtures are re-derived, never assumed.
+- **Declared supersessions (the only edits to existing gate tests, spec'd here so they are
+  never a quiet weakening).** Gate 8's choke scenario asserted the wall *stops* the mover —
+  that encoded the placeholder mover, not a law. With flow fields the same order must now
+  route through the gap; gate 8 keeps its true invariant (never occupies an impassable tile,
+  golden-pinned end state) and gate 9 owns the strengthened arrival contract. Likewise gate
+  8's fairness readout keeps its core contract (lopsided-gate skew exceeds open-arena skew on
+  re-derived numbers), but its side-assertion that the open-arena skew is *strictly positive*
+  encoded issue #4's existence; once the fix lands it may be relaxed to non-negative if the
+  measurement demands. Nothing else in gates 1–8 may change; in particular gate 7's
+  seeds-have-teeth contract (the close matchup stays contested both ways) must hold on the
+  re-derived numbers — if collision flips the matchup one-sided, the fix is content tuning
+  inside this gate before its goldens are recorded, never a weakened check.
+
+**Acceptance (gate:9 exits 0):**
+- Fairness mechanism: a mirrored duel (identical units, mirrored positions, mutual ATTACK on
+  tick 0) plays out with per-tick identical hp trajectories for both sides, melee and ranged
+  variants, each end state golden-pinned — the second actor's information advantage is gone.
+- Fairness at population: the open-arena mirror matchup (grunt-pack vs itself, gate seed set)
+  shows side skew strictly below the committed pre-fix baseline of **32** (measured at
+  planning, main @ 1569eed; slot0 18 / slot1 50).
+- Collision has teeth: a converge scenario (a squad ordered to one point from distinct tiles)
+  never has two entities sharing a tile after any movement, packs around the destination, and
+  comes to rest (arrival relaxation) — golden-pinned.
+- No walking through units: a unit ordered through a stationary blocker routes around it,
+  never co-occupies its tile, and arrives — golden-pinned.
+- Flow fields route: on the committed choke-corridor fixture, the gate-8 scenario's order
+  (through the wall band) now **arrives** at its destination tile within a committed tick
+  budget (≤ 60), occupying only passable tiles throughout — golden-pinned. This supersedes
+  gate 8's stopped-at-the-wall assertion, as spec'd above.
+- Armies move: 40 grunts ordered across the choke-corridor wall; at least 90% reach the far
+  side within a committed budget (≤ 300 ticks), no post-movement co-occupancy at any tick —
+  golden-pinned. This is the charter's 40-unit-army question made mechanical.
+- `docs/decisions/movement-fairness.md` and `docs/decisions/unit-collision.md` are ratified
+  (Status: decided).
+- The golden migration is complete and honest: `npm run gates:all` passes gates 1–8 on the
+  re-recorded goldens (gate 8's map-vs-open and lopsided-vs-open contracts hold on re-derived
+  numbers) and gate:9 joins the loop — the final line reads `ALL GATES PASS` again.
+
+**Human review:** load the choke replay and move a 40-grunt army through the gap — does the
+column feel like an army or a traffic jam? Do engagements now last long enough to read (mean
+ticks up from 19), with concaves and surrounds emerging at the gap? Run the mirror matchup and
+watch a few games: does "fair" now match what the collapsed skew number says? That feel
+judgment is the point of the gate and stays out of any goal condition.
+
 ---
 
 ## Aggregate
 
 `npm run gates:all` runs the gates in order and prints `GATE N PASS` per gate plus a final
 `ALL GATES PASS`. That final line is the single measurable end state for a full-campaign goal.
-(Currently gate:1..7; gate:8 joins the loop as part of its own acceptance.)
+(Currently gate:1..8; gate:9 joins the loop as part of its own acceptance.)

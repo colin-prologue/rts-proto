@@ -17,6 +17,7 @@
     "gate:6": "node scripts/gates/gate6.mjs",
     "gate:7": "node scripts/gates/gate7.mjs",
     "gate:8": "node scripts/gates/gate8.mjs",
+    "gate:9": "node scripts/gates/gate9.mjs",
     "gates:all": "node scripts/gates/all.mjs",
     "replay:record": "vite-node --config vitest.config.ts apps/headless/src/record.ts --",
     "balance": "vite-node --config vitest.config.ts apps/headless/src/balance-cli.ts --"
