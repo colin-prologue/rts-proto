@@ -182,10 +182,67 @@ Is the whole loop — edit a row, re-run, re-watch — a five-minute experiment?
 per-orientation split: a systematic first-actor bias there is a real sim finding to weigh,
 not a harness bug.
 
+## Gate 8 — Maps & terrain as data (make "does this map play fair" answerable)
+
+The charter's third design question gets its surface. A map becomes a JSON fixture — adding a
+map is adding a file, never code — and the two existing tools grow hitches so map fairness is
+*measurable* (balance harness `--map`) and *watchable* (the viewer renders terrain). The gate
+ships **passability terrain only** (chokes, walls, arenas): movement already consumes
+`TILE_PASSABLE`, so `step()` is untouched and no committed golden moves. High ground changes
+combat and is deliberately deferred to its own decision record — the line is drawn in
+`docs/decisions/maps-as-data.md`.
+
+Pieces:
+
+- **Map fixtures.** `{ name, tiles, spawns }`: ASCII tile rows under a fixed legend (`.`
+  passable, `#` impassable), a safe-token name, and exactly two muster anchors. Parsed by a
+  pure `parseMap` in `packages/sim` (no fs — file I/O stays in apps and tests, the comp split).
+  `initialState` gains an optional map argument defaulting to the open 32×32.
+- **Replay format v2.** Per `docs/decisions/maps-as-data.md`: `v` absent = v1 = the default
+  open map (today's files stay valid); `v: 2` embeds the runtime map `{ w, h, flags }` inline —
+  replays stay self-contained ("reconstruct a scenario from nothing"; the map is hashed state,
+  so a by-name reference that drifts would silently diverge). The loader refuses unknown
+  versions and v/map mismatches loudly.
+- **Harness `--map`.** `npm run balance -- <compA> <compB> --map <fixture>`: spawn anchors come
+  from the fixture's `spawns`, the report records the map name, and exported runs are v2 files
+  embedding the map. The no-map path stays byte-identical — the committed gate 7 report golden
+  is the proof (the report only gains a map field when a map is given).
+- **Viewer terrain.** The playground draws impassable tiles under the units; the derivation is
+  a view-model function testable headless, like Gate 6's flybys and pips.
+
+**Acceptance (gate:8 exits 0):**
+- Map = data: a committed map fixture parses to a `WorldMap`; a second committed fixture loads
+  and runs with no sim or harness code change.
+- Terrain has teeth: on the committed choke fixture, a unit ordered through the wall never
+  occupies an impassable tile, and the scenario end-state hashes to a committed golden.
+- Sim untouched on the default path: every previously committed golden (gates 1, 3, 4, and the
+  gate 7 report hash) still matches.
+- Replay v2 round-trip: a run exported from a `--map` report is a v2 file with the map embedded;
+  re-simulating it through `buildReplayInitial` lands on the `endHash` in its report row.
+- v1 compat + version teeth: the committed gate4-match v1 replay still re-simulates to its
+  golden through the same loader; an unknown version or a v/map mismatch is refused loudly.
+- The map reaches the measurement: the balance report over the committed seed set on the choke
+  fixture is deterministic (own committed golden) and its outcomes differ from the same matchup
+  on the default arena.
+- Fairness is measurable: a mirror matchup (one comp vs itself) on the committed asymmetric
+  fixture shows a larger per-side skew than the same mirror matchup on the default arena —
+  differencing out the known movement-order side bias (issue #4) so the number isolates the map.
+- Viewer terrain, headless: a view-model unit test derives terrain draw entries with projected
+  positions from impassable tiles, no canvas.
+- `docs/decisions/maps-as-data.md` is ratified (Status: decided).
+- gate:8 joins `gates:all` and the final line reads `ALL GATES PASS` again.
+
+**Human review:** load a choke map in the viewer and judge it cold: can you see the terrain and
+read the fight around it? Run a close matchup on the corridor map — do chokes create the
+decisions they exist for (concave vs column, range vs melee at a gap)? Read the asymmetric
+fixture's per-side skew next to the default arena's: does the fairness number match what
+watching the replays tells you? That judgment — *is this map interesting, not just fair* — is
+the point of the gate and stays out of any goal condition.
+
 ---
 
 ## Aggregate
 
 `npm run gates:all` runs the gates in order and prints `GATE N PASS` per gate plus a final
 `ALL GATES PASS`. That final line is the single measurable end state for a full-campaign goal.
-(Currently gate:1..6; gate:7 joins the loop as part of its own acceptance.)
+(Currently gate:1..7; gate:8 joins the loop as part of its own acceptance.)
