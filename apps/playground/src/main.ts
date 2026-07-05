@@ -22,8 +22,13 @@ import {
   hpFraction,
   queuePips,
   terrainTiles,
+  mapScreenBounds,
+  fitCamera,
+  zoomAboutPoint,
+  cameraScreenToWorld,
   TILE_H,
   TILE_W,
+  type Camera,
 } from '@rts/render'
 
 const TICK_MS = 100 // 10 Hz sim, per architecture; render interpolates at display rate
@@ -38,14 +43,91 @@ const app = new Application()
 await app.init({ resizeTo: window, background: '#111418', antialias: true })
 document.body.appendChild(app.canvas)
 
+const replayName = new URLSearchParams(location.search).get('replay')
+
 const world = new Container()
-world.position.set(window.innerWidth / 2, 120)
 app.stage.addChild(world)
 const terrainLayer = new Graphics()
 const unitLayer = new Graphics()
 const flybyLayer = new Container()
 const ackLayer = new Graphics()
 world.addChild(terrainLayer, unitLayer, flybyLayer, ackLayer)
+
+// ---- camera (#13) ----------------------------------------------------------------------------
+// The camera is a transform on the world container — the sim and the projection never see it.
+// All the math is pure in @rts/render; this block is only event wiring.
+
+const ZOOM_MIN = 0.2
+const ZOOM_MAX = 4
+const PAN_PX_PER_FRAME = 12
+
+let cam: Camera = { x: 0, y: 0, scale: 1 }
+let zoomMin = ZOOM_MIN // floored at the fit scale, so the full-map view is always reachable
+let viewW = window.innerWidth
+let viewH = window.innerHeight
+
+function applyCamera() {
+  world.position.set(cam.x, cam.y)
+  world.scale.set(cam.scale)
+  ;(window as { __cam?: Camera }).__cam = cam // debug handle for headed harness checks
+}
+
+/** Initial framing: fit the whole map (from state.map bounds) into the viewport. */
+function frameMap(map: { w: number; h: number }) {
+  cam = fitCamera(mapScreenBounds(map, proj), viewW, viewH, 48)
+  zoomMin = Math.min(ZOOM_MIN, cam.scale)
+  applyCamera()
+}
+
+// Resize: keep the world point at the old viewport center at the new center, same zoom.
+window.addEventListener('resize', () => {
+  cam = { ...cam, x: cam.x + (window.innerWidth - viewW) / 2, y: cam.y + (window.innerHeight - viewH) / 2 }
+  viewW = window.innerWidth
+  viewH = window.innerHeight
+  applyCamera()
+})
+
+app.canvas.addEventListener(
+  'wheel',
+  (ev) => {
+    ev.preventDefault()
+    cam = zoomAboutPoint(cam, ev.clientX, ev.clientY, Math.pow(1.0015, -ev.deltaY), zoomMin, ZOOM_MAX)
+    applyCamera()
+  },
+  { passive: false }
+)
+
+// Drag-pan: middle mouse always; left button too in the replay viewer (left is unused there —
+// the sandbox keeps left free and moves with right-click).
+let drag: { x: number; y: number } | null = null
+const dragButtons = (ev: PointerEvent) => ev.button === 1 || (ev.button === 0 && replayName !== null)
+app.canvas.addEventListener('pointerdown', (ev) => {
+  if (dragButtons(ev)) { drag = { x: ev.clientX, y: ev.clientY }; ev.preventDefault() }
+})
+window.addEventListener('pointermove', (ev) => {
+  if (!drag) return
+  cam = { ...cam, x: cam.x + ev.clientX - drag.x, y: cam.y + ev.clientY - drag.y }
+  drag = { x: ev.clientX, y: ev.clientY }
+  applyCamera()
+})
+window.addEventListener('pointerup', () => { drag = null })
+
+// Arrow-key pan: held-key set sampled per frame, so panning is smooth and framerate-tied.
+const heldKeys = new Set<string>()
+window.addEventListener('keydown', (ev) => {
+  if (ev.key.startsWith('Arrow')) { heldKeys.add(ev.key); ev.preventDefault() }
+})
+window.addEventListener('keyup', (ev) => heldKeys.delete(ev.key))
+app.ticker.add(() => {
+  if (heldKeys.size === 0) return
+  // Arrows move the *view* over the world, so the world container shifts the opposite way.
+  const dx = (heldKeys.has('ArrowLeft') ? 1 : 0) - (heldKeys.has('ArrowRight') ? 1 : 0)
+  const dy = (heldKeys.has('ArrowUp') ? 1 : 0) - (heldKeys.has('ArrowDown') ? 1 : 0)
+  if (dx || dy) {
+    cam = { ...cam, x: cam.x + dx * PAN_PX_PER_FRAME, y: cam.y + dy * PAN_PX_PER_FRAME }
+    applyCamera()
+  }
+})
 
 // Terrain is static per match — drawn once from the initial state's map (Gate 8: maps as data;
 // v2 replays embed theirs). Impassable tiles render as dark diamonds under the units.
@@ -171,14 +253,13 @@ function hudLines(state: State, extra: string): string {
 
 // ---- modes -----------------------------------------------------------------------------------
 
-const replayName = new URLSearchParams(location.search).get('replay')
-
 if (replayName) {
   // -------- replay viewer --------
   const file = (await (await fetch(`/replays/${replayName}.json`)).json()) as ReplayFile
   let prev = buildReplayInitial(file)
   let next = prev
   drawTerrain(prev)
+  frameMap(prev.map)
   let turn = 0
   let speedIdx = 2 // 1x
   let paused = false
@@ -221,13 +302,14 @@ if (replayName) {
     drawWorld(next, interpolatePositions(prev, next, t), new Set())
     animateFlybys()
     const state = turn >= file.log.length ? 'ENDED' : paused ? 'PAUSED' : `${SPEEDS[speedIdx]}x`
-    hud.textContent = hudLines(next, `replay ${file.name}  turn ${turn}/${file.log.length}  [${state}]  space=pause  .=step  +/-=speed  r=restart`)
+    hud.textContent = hudLines(next, `replay ${file.name}  turn ${turn}/${file.log.length}  [${state}]  space=pause  .=step  +/-=speed  r=restart  drag/arrows=pan  wheel=zoom`)
   })
 } else {
   // -------- live sandbox --------
   let prev: State = initialState(1)
   let next: State = step(prev, [])
   drawTerrain(prev)
+  frameMap(prev.map)
   let pending: Command[] = []
   let seq = 0
   const selected = new Set<number>([1])
@@ -235,11 +317,11 @@ if (replayName) {
 
   app.canvas.addEventListener('contextmenu', (ev) => {
     ev.preventDefault()
-    const sx = ev.clientX - world.position.x
-    const sy = ev.clientY - world.position.y
-    const [wx, wy] = proj.screenToWorld(sx, sy)
+    // Through the camera transform (#13): the pure converters don't change, the caller does.
+    const [wx, wy] = cameraScreenToWorld(cam, proj, ev.clientX, ev.clientY)
     pending.push(rightClickToMove([...selected], wx, wy, 0, seq++))
-    ack = { x: sx, y: sy, ttl: 1 }
+    // The ack flash lives in the world container, so anchor it in pre-camera world-screen px.
+    ack = { x: (ev.clientX - cam.x) / cam.scale, y: (ev.clientY - cam.y) / cam.scale, ttl: 1 }
   })
 
   let acc = 0
@@ -264,6 +346,6 @@ if (replayName) {
       ack.ttl -= 0.05
       if (ack.ttl <= 0) ack = null
     }
-    hud.textContent = hudLines(next, 'sandbox — right-click to move  (open /?replay=gate4-match for the match replay)')
+    hud.textContent = hudLines(next, 'sandbox — right-click to move, middle-drag/arrows=pan, wheel=zoom  (open /?replay=gate4-match for the match replay)')
   })
 }
