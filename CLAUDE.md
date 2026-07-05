@@ -20,8 +20,12 @@ The first two things worth building for real are the **deterministic simulation 
   and findings are tracked as issues (labels: `roadmap`, `gate-candidate`, `design-debt`,
   `blocked`) — that is the only forward queue, so it never drifts against prose. An issue
   graduates by a planning commit (build-plan section + decision record + known-failing
-  contracts + goal string) and closes when its gate merges. `docs/build-plan.md` holds only
-  gates that have been specced this way — never future intentions.
+  contracts), gets its `/goal` string appended to its own body under a `## Goal` heading in a
+  fenced block at that moment, and closes when its gate merges. The issue is the run ticket:
+  contract in the repo (reviewed), invocation on the issue. Editing an issue body can never
+  weaken a gate — every mechanical claim in a goal string is backed by a committed check.
+  `docs/build-plan.md` holds only gates that have been specced this way — never future
+  intentions.
 - **The invariants in `CONSTITUTION.md` are law.** They are what makes inputs-not-state work.
   If a change would violate one, stop and reconsider the design instead.
 - **Ratify open decisions with a decision record.** `docs/architecture.md` lists a few forks
