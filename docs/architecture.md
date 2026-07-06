@@ -64,18 +64,30 @@ The relay collects frames stamped `executeTurn = T` from **all** peers, bundles 
 is what triggers a peer to send its frame for `T + delay` — the pipeline self-clocks off broadcasts.
 Every peer hashes full sim state every 32 turns; the first mismatch is a desync caught at the source.
 
-## Decisions left open — ratify with a record before the gate that needs each
+## Ratified decisions — the records under `docs/decisions/`
 
-- **Numeric model (needed before Gate 1 exit).** *Recommendation: fixed-point integer math* for all
-  simulated quantities. Cross-engine float determinism is not guaranteed for transcendentals
-  (V8 / SpiderMonkey / JSC differ), and this must run identically in Node and every browser. Basic
-  IEEE-754 add/sub/mul/div is deterministic, so *fenced floats* (integer/quantized at every boundary,
-  no `sin/cos/sqrt` in sim) is a lighter alternative if you commit to staying disciplined — but
-  fixed-point makes violations a compile error via a `Fixed` newtype. Pick one, record why.
-- **Projection (needed by Gate 2).** Dimetric 2:1 (~26.57°, the classic look) vs true isometric vs
-  3D under a fixed ortho camera. Drives all art and input math.
-- **Pathfinding (needed by Gate 3).** *Recommendation: flow fields* for moving groups; per-unit A*
-  degrades badly with army size. Grid + terrain flags (passable, high/low ground, choke) either way.
+The forks this document originally left open have all been decided; each has a record capturing
+the why and the rejected alternatives. Read the record, not this summary, before touching the
+area:
+
+- **numeric-model** — fixed-point integer math via a `Fixed` newtype (cross-engine float
+  determinism is not guaranteed; violations become compile errors).
+- **projection** — the 2.5D screen mapping (Gate 2).
+- **pathfinding** — integer cost fields behind a pathfinder interface; flow fields landed in
+  Gate 9.
+- **sim-events** — `step()` takes an optional out-array of plain-data events; events are pure
+  output, no golden may move (Gate 6).
+- **balance-sampling** — where win-rate sample variance comes from: seeded setup jitter outside
+  the sim, both orientations per seed, `step()` untouched (Gate 7).
+- **maps-as-data** — map fixtures as diffable ASCII rows; replay format v2 embeds the map
+  (Gate 8).
+- **movement-fairness** — targeting/movement intents computed from a pre-movement snapshot,
+  removing the movement-order aim asymmetry (Gate 9).
+- **unit-collision** — one entity per tile, id-stable resolution, arrival relaxation (Gate 9).
+
+New forks follow the same rule: before the gate that needs one, pick a direction, write
+`docs/decisions/<plain-language-name>.md` with the why and the rejected alternatives, then
+implement it.
 
 ## Free tooling to build as first-class (falls out of determinism)
 
