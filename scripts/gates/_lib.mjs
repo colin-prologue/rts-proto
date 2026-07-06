@@ -38,4 +38,5 @@ export const GATES = [
   [6, 'tests/gates/gate6.replay.test.ts'],
   [7, 'tests/gates/gate7.balance.test.ts'],
   [8, 'tests/gates/gate8.terrain.test.ts'],
+  [9, 'tests/gates/gate9.movement.test.ts'],
 ]

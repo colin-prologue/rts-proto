@@ -167,8 +167,12 @@ describe('Gate 8 — maps & terrain as data', () => {
       expect(onPassable(choke.map, s, 2), `tick ${s.tick}: grunt inside a wall`).toBe(true)
     }
     const grunt = s.entities.find((e) => e.id === 2)!
-    expect(floorToInt(grunt.x)).toBeGreaterThan(5) // it did march
-    expect(floorToInt(grunt.x)).toBeLessThan(15) // and the wall stopped it
+    // Gate 9 superseded the placeholder mover (declared in docs/build-plan.md Gate 9): the
+    // same order now routes through the gap instead of stopping at the wall, so "the wall
+    // stopped it" became "it crossed without ever entering the wall". The invariant this gate
+    // owns — never inside an impassable tile, asserted every tick above — is unchanged, and
+    // gate 9 owns the arrival contract.
+    expect(floorToInt(grunt.x)).toBeGreaterThan(16) // through the gap, past the wall band
     goldenCheck('gate8.choke.hash', hashState(s))
   })
 
@@ -245,7 +249,12 @@ describe('Gate 8 — maps & terrain as data', () => {
     const mirror = comp('grunt-pack')
     const open = sideSkew(runBalance(mirror, mirror, GATE_OPTS))
     const lopsided = sideSkew(runBalance(mirror, mirror, { ...GATE_OPTS, map: map('lopsided-gate') }))
-    expect(open.skew).toBeGreaterThan(0) // the issue-#4 baseline is real and visible
+    // Gate 9 fixed issue #4 (docs/decisions/movement-fairness.md) and the open-arena baseline
+    // collapsed — to exactly zero on this seed set — so the pre-fix assertion that the side
+    // bias is "real and visible" lost its premise (the supersession declared in
+    // docs/build-plan.md Gate 9). What this gate still owns: the map's own skew must rise
+    // above whatever the arena baseline is.
+    expect(open.skew).toBeGreaterThanOrEqual(0)
     expect(lopsided.skew).toBeGreaterThan(open.skew) // the map adds measurable unfairness on top
   })
 

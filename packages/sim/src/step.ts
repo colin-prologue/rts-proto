@@ -1,16 +1,19 @@
 import type { State, Entity, Player } from './types'
-import { TILE_PASSABLE } from './types'
 import type { Command } from './command-types'
 import type { SimEvent } from './events'
 import { sortCommands } from './commands'
+import { rngU32 } from './rng'
 import { type Fixed, fromInt, add, sub, neg, cmp, floorToInt } from './fixed'
 import { GATHER_PERIOD, tableDamage, type UnitSpec } from './data'
+import { createPathfinder, nextTile, passableTile, UNREACHABLE } from './pathfinder'
+import { nearestPassable } from './map-fixture'
 
 // The pure reducer: state(n+1) = step(state(n), commands(n)).
 // Phases run in a fixed order, each iterating entities in stable id order (the entities array is
 // kept sorted by id — ids only ever increase): 1 apply sorted commands, 2 construction+production,
-// 3 gathering, 4 movement, 5 combat (simultaneous damage), 6 deaths. No I/O, no clock — any
-// randomness must be drawn from state.rng and threaded back (CONSTITUTION I–IV).
+// 3 gathering, 4 movement (snapshot intents, then collision-checked application), 5 combat
+// (simultaneous damage), 6 deaths. No I/O, no clock — any randomness must be drawn from
+// state.rng and threaded back (CONSTITUTION I–IV).
 
 /** One axis of grid movement: advance `from` toward `to`, at most `speed` per tick. */
 function stepToward(from: Fixed, to: Fixed, speed: Fixed): Fixed {
@@ -21,17 +24,14 @@ function stepToward(from: Fixed, to: Fixed, speed: Fixed): Fixed {
 }
 
 /** Chebyshev distance check — no sqrt, no transcendentals in the sim. */
-function inRange(a: Entity, b: Entity, range: number): boolean {
-  const dx = Math.abs((a.x as number) - (b.x as number))
-  const dy = Math.abs((a.y as number) - (b.y as number))
+function inRangeAt(ax: Fixed, ay: Fixed, bx: Fixed, by: Fixed, range: number): boolean {
+  const dx = Math.abs((ax as number) - (bx as number))
+  const dy = Math.abs((ay as number) - (by as number))
   return Math.max(dx, dy) <= (fromInt(range) as number)
 }
 
-function passable(s: State, x: Fixed, y: Fixed): boolean {
-  const tx = floorToInt(x)
-  const ty = floorToInt(y)
-  if (tx < 0 || ty < 0 || tx >= s.map.w || ty >= s.map.h) return false
-  return (s.map.flags[ty * s.map.w + tx] & TILE_PASSABLE) !== 0
+function inRange(a: Entity, b: Entity, range: number): boolean {
+  return inRangeAt(a.x, a.y, b.x, b.y, range)
 }
 
 function supplyCap(entities: Entity[], specs: Record<string, UnitSpec>, playerId: number): number {
@@ -200,26 +200,157 @@ export function step(state: State, commands: Command[], events?: SimEvent[]): St
   }
 
   // -- 4. movement (approach for out-of-range attackers happens here too) ----------------------
+  // Two passes in stable id order (docs/decisions/movement-fairness.md): every unit's targeting
+  // and desired step are computed against a snapshot of positions taken here, so nobody acts on
+  // a same-tick move — the issue-#4 information asymmetry is gone by construction. Application
+  // then enforces one entity per tile (docs/decisions/unit-collision.md): a tile vacated by an
+  // earlier id is free to a later one, contested tiles go to the lower id.
+  const map = state.map
+  const pathfinder = createPathfinder(map)
+  const snap = new Map<number, { x: Fixed; y: Fixed }>()
+  for (const e of entities) snap.set(e.id, { x: e.x, y: e.y })
+  // Tile occupancy as counts: spawn stacks are legal, movement never creates a new one.
+  // Off-map positions are never registered — a row-major index computed from out-of-bounds
+  // coords would alias a REAL tile (e.g. (32, 10) on a 32-wide map is (0, 11)'s index), making
+  // an edge-dropped unit a phantom collider on an innocent tile (PR #18 review).
+  const occ = new Map<number, number>()
+  const movers = new Map<number, number>()
+  const inBoundsTile = (tx: number, ty: number) => tx >= 0 && ty >= 0 && tx < map.w && ty < map.h
+  const bumpTile = (m: Map<number, number>, tx: number, ty: number, d: number) => {
+    if (!inBoundsTile(tx, ty)) return
+    const k = ty * map.w + tx
+    const v = (m.get(k) ?? 0) + d
+    if (v === 0) m.delete(k)
+    else m.set(k, v)
+  }
+  for (const e of entities) bumpTile(occ, floorToInt(e.x), floorToInt(e.y), 1)
+
+  // Intent pass: attack approach reads the snapshot; a mover is any entity that wants to move
+  // this tick — for arrival relaxation, occupants that never intended to move count as terrain.
+  interface Intent {
+    e: Entity
+    spec: UnitSpec
+    destX: number
+    destY: number
+    exact: boolean // destination tile is the order's own tile (finish walks to exact coords)
+  }
+  const intents: Intent[] = []
   for (const e of entities) {
     const spec = specs[e.type]
     if ((spec?.speed ?? 0) <= 0) continue
     if (e.attackTarget !== undefined) {
       const t = byId.get(e.attackTarget)
-      if (t && !inRange(e, t, spec.range)) e.target = { x: t.x, y: t.y }
+      const tp = t && snap.get(t.id)
+      if (tp && !inRangeAt(e.x, e.y, tp.x, tp.y, spec.range)) e.target = { x: tp.x, y: tp.y }
       else delete e.target
     }
     if (!e.target) continue
-    const speed = fromInt(spec.speed)
-    const nx = stepToward(e.x, e.target.x, speed)
-    const ny = stepToward(e.y, e.target.y, speed)
-    if (passable(state, nx, ny)) {
-      e.x = nx
-      e.y = ny
-    } else {
-      delete e.target // blocked by terrain — stop rather than grind (flow fields land later)
+    let destX = floorToInt(e.target.x)
+    let destY = floorToInt(e.target.y)
+    let exact = true
+    if (!passableTile(map, destX, destY)) {
+      // A MOVE into a wall walks to the nearest ground beside it instead of grinding at it.
+      ;({ x: destX, y: destY } = nearestPassable(map, destX, destY))
+      exact = false
+    }
+    intents.push({ e, spec, destX, destY, exact })
+    bumpTile(movers, floorToInt(e.x), floorToInt(e.y), 1)
+  }
+
+  // Application pass: follow the flow field one tile per speed point, under tile exclusivity.
+  // Contested tiles go to whichever mover applies first. A fixed ascending order would hand
+  // that edge to lower ids — player 0, by spawn order — every single tick (measured: mirror-
+  // matchup slot skew 196/972, z≈6), so each tick draws the direction from the sim's seeded
+  // RNG: one draw at a fixed point in the phase (CONSTITUTION III — the draw order is part of
+  // the contract), unbiased and uncorrelated with contact geometry by construction, unlike any
+  // deterministic schedule such as tick parity (docs/decisions/unit-collision.md).
+  const occupancy = (tile: number): 'free' | 'mover' | 'stationary' =>
+    (occ.get(tile) ?? 0) === 0 ? 'free' : (movers.get(tile) ?? 0) > 0 ? 'mover' : 'stationary'
+  const [dirDraw, rngAfterMove] = rngU32(state.rng)
+  const ordered = (dirDraw & 1) === 0 ? intents : [...intents].reverse()
+  for (const it of ordered) {
+    const { e, spec } = it
+    const field = pathfinder.fieldTo(it.destX, it.destY)
+    if (field.costAt(floorToInt(e.x), floorToInt(e.y)) === UNREACHABLE) {
+      if (passableTile(map, floorToInt(e.x), floorToInt(e.y))) {
+        delete e.target // no path (walled off) — stop rather than grind
+        continue
+      }
+      // The unit itself stands on invalid ground — off the map (production drops at
+      // building.x+1, which an edge building puts out of bounds) or inside a wall (BUILD
+      // coords are unvalidated; placement rules are issue #6). The field cannot see it, so
+      // recover: step to the best adjacent passable, unoccupied tile (nearest to the resolved
+      // destination, fixed scan order on ties — the straight line alone can be blocked by the
+      // very building that produced the unit). Wait a tick if every candidate is occupied;
+      // stop only if no adjacent ground exists at all (PR #18 review).
+      const cx0 = floorToInt(e.x)
+      const cy0 = floorToInt(e.y)
+      let bestX = -1
+      let bestY = -1
+      let bestD = UNREACHABLE
+      let sawOccupied = false
+      for (let dy2 = -1; dy2 <= 1; dy2++) {
+        for (let dx2 = -1; dx2 <= 1; dx2++) {
+          if (dx2 === 0 && dy2 === 0) continue
+          const tx = cx0 + dx2
+          const ty = cy0 + dy2
+          if (!passableTile(map, tx, ty)) continue
+          if ((occ.get(ty * map.w + tx) ?? 0) > 0) {
+            sawOccupied = true
+            continue
+          }
+          const d = Math.max(Math.abs(tx - it.destX), Math.abs(ty - it.destY))
+          if (d < bestD) {
+            bestX = tx
+            bestY = ty
+            bestD = d
+          }
+        }
+      }
+      if (bestX < 0) {
+        if (!sawOccupied) delete e.target // no adjacent ground at all — truly stranded terrain
+        continue // occupied candidates: retry next tick
+      }
+      bumpTile(occ, cx0, cy0, -1) // no-op when off-map (never registered)
+      bumpTile(occ, bestX, bestY, 1)
+      bumpTile(movers, cx0, cy0, -1)
+      bumpTile(movers, bestX, bestY, 1)
+      e.x = fromInt(bestX)
+      e.y = fromInt(bestY)
       continue
     }
-    if (e.x === e.target.x && e.y === e.target.y) delete e.target
+    for (let leg = 0; leg < spec.speed && e.target; leg++) {
+      const cx = floorToInt(e.x)
+      const cy = floorToInt(e.y)
+      if (field.costAt(cx, cy) === 0) {
+        // On the destination tile: walk to the exact ordered coords (sub-tile), unless the
+        // order pointed into a wall and this tile is only its nearest reachable stand-in.
+        if (!it.exact) {
+          delete e.target
+          break
+        }
+        e.x = stepToward(e.x, e.target.x, fromInt(spec.speed - leg))
+        e.y = stepToward(e.y, e.target.y, fromInt(spec.speed - leg))
+        if (e.x === e.target.x && e.y === e.target.y) delete e.target
+        break
+      }
+      const { tile, stall } = nextTile(map, field, cx, cy, it.destX, it.destY, occupancy)
+      if (tile === null) {
+        // Every strictly better tile held by something that is not going anywhere: the order
+        // is as complete as it can get (arrival relaxation). A queue of movers keeps waiting.
+        if (stall === 'blocked-stationary') delete e.target
+        break
+      }
+      const toX = tile % map.w
+      const toY = (tile - toX) / map.w
+      bumpTile(occ, cx, cy, -1)
+      bumpTile(occ, toX, toY, 1)
+      bumpTile(movers, cx, cy, -1)
+      bumpTile(movers, toX, toY, 1)
+      e.x = fromInt(toX)
+      e.y = fromInt(toY)
+      if (e.x === e.target.x && e.y === e.target.y) delete e.target
+    }
   }
 
   // -- 5. combat: all attacks resolve simultaneously, then damage applies ----------------------
@@ -267,7 +398,7 @@ export function step(state: State, commands: Command[], events?: SimEvent[]): St
 
   return {
     tick: state.tick + 1,
-    rng: state.rng,
+    rng: rngAfterMove,
     entities: survivors,
     players,
     nextEntityId,

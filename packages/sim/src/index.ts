@@ -7,6 +7,7 @@ export * from './events'
 export * from './command-types'
 export * from './commands'
 export * from './step'
+export * from './pathfinder'
 export * from './replay-file'
 export * from './map-fixture'
 
