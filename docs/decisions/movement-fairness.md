@@ -48,9 +48,11 @@ open-arena skew) must hold on re-derived numbers.
 - **Harness-side compensation** (weighting orientations to hide the bias):
   `docs/decisions/balance-sampling.md` draws this line explicitly — a sim finding gets a sim
   fix, never a measurement workaround.
-- **Per-tick randomized movement order:** turns a systematic bias into noise instead of
-  removing it, spends RNG draws on non-gameplay (polluting the call-order contract,
-  CONSTITUTION III), and makes replays harder to reason about.
+- **Per-tick randomized movement order (as the fix for the aim asymmetry):** turns the
+  information bias into noise instead of removing it — the snapshot removes it structurally.
+  Note the scope: the *contention* channel (who wins a contested tile) has no structural fix,
+  only neutral resolution, and there `docs/decisions/unit-collision.md` does adopt a per-tick
+  direction draw; the rejection here is of randomizing what a snapshot can simply make fair.
 - **Double-buffering the whole entity array (full simultaneous tick):** correct but far more
   machinery than the one phase that needs it; gathering, production, and combat are already
   order-safe or simultaneous.
