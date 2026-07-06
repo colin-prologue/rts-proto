@@ -16,7 +16,7 @@ import {
   type SimEvent,
   type ReplayFile,
 } from '@rts/sim'
-import { flybysFrom, hpFraction, queuePips, interpolatePositions } from '@rts/render'
+import { flybysFrom, hpFraction, queuePips, interpolatePositions, reconstructToTick } from '@rts/render'
 
 const golden = (file: string) => Number(readFileSync(resolve(`tests/gates/golden/${file}`), 'utf8').trim())
 
@@ -140,5 +140,37 @@ describe('Gate 6 — replay viewer', () => {
   it('the sim-events decision record is ratified (not a proposal)', () => {
     const record = readFileSync(resolve('docs/decisions/sim-events.md'), 'utf8')
     expect(record, 'flip **Status:** to decided when ratifying').toMatch(/status[^a-z\n]*decided/i)
+  })
+})
+
+// #14 — step-back is deterministic reconstruction; determinism makes it exact, these pin it.
+describe('Gate 6 addendum — step-back reconstruction (#14)', () => {
+  const file = JSON.parse(
+    readFileSync(resolve('apps/playground/public/replays/gate4-match.json'), 'utf8')
+  ) as ReplayFile
+
+  it('reconstruct-to-tick(N) hash-equals forward-play-to-N for several N', () => {
+    // Forward play exactly the way the viewer advances: one step per log entry.
+    let s = buildReplayInitial(file)
+    const forwardHash: number[] = [hashState(s)]
+    for (let t = 0; t < file.log.length; t++) {
+      s = step(s, file.log[t] ?? [])
+      forwardHash.push(hashState(s))
+    }
+    const L = file.log.length
+    expect(L).toBeGreaterThan(2)
+    for (const n of [0, 1, 2, Math.floor(L / 3), Math.floor(L / 2), L - 1, L]) {
+      expect(
+        hashState(reconstructToTick(file, n, buildReplayInitial, step)),
+        `reconstruction diverged at tick ${n}`
+      ).toBe(forwardHash[n])
+    }
+  })
+
+  it('reconstruct-to-tick clamps n to the log range', () => {
+    const initialHash = hashState(buildReplayInitial(file))
+    const endHash = hashState(replay(buildReplayInitial(file), file.log))
+    expect(hashState(reconstructToTick(file, -3, buildReplayInitial, step))).toBe(initialHash)
+    expect(hashState(reconstructToTick(file, file.log.length + 100, buildReplayInitial, step))).toBe(endHash)
   })
 })

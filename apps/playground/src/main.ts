@@ -26,6 +26,7 @@ import {
   fitCamera,
   zoomAboutPoint,
   cameraScreenToWorld,
+  reconstructToTick,
   TILE_H,
   TILE_W,
   type Camera,
@@ -286,6 +287,16 @@ if (replayName) {
   window.addEventListener('keydown', (ev) => {
     if (ev.key === ' ') { paused = !paused; ev.preventDefault() }
     else if (ev.key === '.') { paused = true; advance() }
+    else if (ev.key === ',') {
+      // Step back = deterministic reconstruction (#14): rebuild from the replay initial and fold
+      // turn−1 logged ticks. No event sink — flybys are not re-shown on backward steps.
+      paused = true
+      if (turn > 0) {
+        turn--
+        prev = next = reconstructToTick(file, turn, buildReplayInitial, step)
+        acc = 0
+      }
+    }
     else if (ev.key === '+' || ev.key === '=') speedIdx = Math.min(SPEEDS.length - 1, speedIdx + 1)
     else if (ev.key === '-') speedIdx = Math.max(0, speedIdx - 1)
     else if (ev.key === 'r' || ev.key === 'R') {
@@ -309,7 +320,7 @@ if (replayName) {
     drawWorld(next, interpolatePositions(prev, next, t), new Set())
     animateFlybys()
     const state = turn >= file.log.length ? 'ENDED' : paused ? 'PAUSED' : `${SPEEDS[speedIdx]}x`
-    hud.textContent = hudLines(next, `replay ${file.name}  turn ${turn}/${file.log.length}  [${state}]  space=pause  .=step  +/-=speed  r=restart  drag/arrows=pan  wheel=zoom`)
+    hud.textContent = hudLines(next, `replay ${file.name}  turn ${turn}/${file.log.length}  [${state}]  space=pause  .=step  ,=back  +/-=speed  r=restart  drag/arrows=pan  wheel=zoom`)
   })
 } else {
   // -------- live sandbox --------

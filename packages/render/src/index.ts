@@ -1,7 +1,7 @@
 // Renderer READS sim state and interpolates between the last two ticks. It must NEVER mutate sim
 // state (CONSTITUTION: sim/render split) — the gate lint holds this package to type imports and
 // pure numeric converters from @rts/sim, nothing that can reach simulated state.
-import type { State, Command, SimEvent, UnitSpec } from '@rts/sim'
+import type { State, Command, SimEvent, UnitSpec, ReplayFile } from '@rts/sim'
 import { toFloat, fromFloat } from '@rts/sim'
 
 export interface RenderAdapter {
@@ -224,6 +224,30 @@ export function terrainTiles(
     }
   }
   return out
+}
+
+// ---- Step-back reconstruction (#14) — pure, testable without a canvas. ------------------------
+
+/**
+ * The state after `n` logged ticks of a replay: rebuild from the replay's initial state and fold
+ * `n` log entries. The sim is a forward-only reducer, so stepping *back* is reconstruction, not
+ * reversal — determinism makes the result exact. O(n) per call; replays are short and step() is
+ * cheap, so no keyframe cache until measurement says otherwise.
+ *
+ * The sim functions arrive as parameters, not imports: gate 2 holds this package to type imports
+ * from @rts/sim, and the caller (viewer or test) already has both. No event sink is threaded
+ * through — damage flybys are forward-play garnish and are deliberately skipped on back-steps.
+ */
+export function reconstructToTick(
+  file: ReplayFile,
+  n: number,
+  buildInitial: (file: ReplayFile) => State,
+  stepTick: (state: State, commands: Command[]) => State
+): State {
+  let s = buildInitial(file)
+  const ticks = Math.max(0, Math.min(n, file.log.length))
+  for (let t = 0; t < ticks; t++) s = stepTick(s, file.log[t] ?? [])
+  return s
 }
 
 /** Production-queue badge model for a building. */
