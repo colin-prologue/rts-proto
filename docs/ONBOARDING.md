@@ -78,7 +78,14 @@ npm run balance -- grunt-pack archer-pack --map choke-corridor
 
 The loop that makes this repo worth using: **edit a data row → re-run balance → export an
 interesting run → watch it in the viewer.** It should take about five minutes end to end. Try
-it: change one cell of the damage table fixture, watch the win rate move, revert.
+it: change one cell of the `damageTable` in `packages/sim/src/data.ts` (`DEFAULT_DATA` — the
+unit rows and damage table the sim actually uses; the fixtures directory holds comps and maps,
+not the core tables), watch the win rate move, then revert.
+
+A golden note on that experiment: while your edit is in place, `npm run gates:all` will fail on
+golden-hash mismatches. **That is the pinning working, not something you broke** — the gates
+pin content as well as code. Revert and they're green again; *keeping* a content change means
+deliberately re-recording the goldens in their own explained commit (see the three laws).
 
 ## How work happens
 
@@ -103,7 +110,8 @@ it: change one cell of the damage table fixture, watch the win rate move, revert
 | I want to… | Look at |
 |---|---|
 | understand the sim | `packages/sim/src` — `step.ts` is the whole game loop |
-| change unit stats / damage | data fixtures under `tests/gates/fixtures/` |
+| change unit stats / damage | `packages/sim/src/data.ts` — `DEFAULT_DATA` is the unit-row + damage table source `initialState` and the balance CLI actually use (see the golden note below) |
+| add a comp to measure | `tests/gates/fixtures/comps/` (unit types + counts, JSON) |
 | add a map | `tests/gates/fixtures/maps/` (ASCII rows; see `docs/decisions/maps-as-data.md`) |
 | touch the renderer / viewer | `apps/playground`, `packages/render` (read-only over sim state) |
 | touch networking | `packages/net` (relay is a metronome + collator, never an authority) |
