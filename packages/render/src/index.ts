@@ -68,6 +68,95 @@ export function interpolatePositions(
   return out
 }
 
+// ---- Camera (#13) — a transform on the world container, render-side only. --------------------
+// The sim never sees the camera: these are pure screen-space helpers, testable without a canvas.
+
+/** World-container transform: translation in screen px plus uniform scale. */
+export interface Camera {
+  x: number
+  y: number
+  scale: number
+}
+
+export interface ScreenBounds {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
+/**
+ * Screen-space bounding box of a w×h tile map. A tile's diamond is exactly the projection of its
+ * unit world square, so projecting the four corners of the world rectangle [0,w]×[0,h] bounds
+ * every tile with no per-tile pass.
+ */
+export function mapScreenBounds(map: { w: number; h: number }, proj: Projection): ScreenBounds {
+  const corners: [number, number][] = [
+    proj.worldToScreen(0, 0),
+    proj.worldToScreen(map.w, 0),
+    proj.worldToScreen(0, map.h),
+    proj.worldToScreen(map.w, map.h),
+  ]
+  return {
+    minX: Math.min(...corners.map(([x]) => x)),
+    minY: Math.min(...corners.map(([, y]) => y)),
+    maxX: Math.max(...corners.map(([x]) => x)),
+    maxY: Math.max(...corners.map(([, y]) => y)),
+  }
+}
+
+/**
+ * Frame the whole bounds inside the viewport: largest uniform scale that fits (never upscaled
+ * past 1 — pixel art reads worst zoomed in by default), centered both axes. Degenerate viewports
+ * (zero-width tab at load) fall back to scale 1 rather than 0/Infinity.
+ */
+export function fitCamera(
+  bounds: ScreenBounds,
+  viewportW: number,
+  viewportH: number,
+  padding = 0
+): Camera {
+  const bw = bounds.maxX - bounds.minX
+  const bh = bounds.maxY - bounds.minY
+  const availW = viewportW - 2 * padding
+  const availH = viewportH - 2 * padding
+  const scale =
+    bw > 0 && bh > 0 && availW > 0 && availH > 0 ? Math.min(availW / bw, availH / bh, 1) : 1
+  return {
+    x: (viewportW - (bounds.minX + bounds.maxX) * scale) / 2,
+    y: (viewportH - (bounds.minY + bounds.maxY) * scale) / 2,
+    scale,
+  }
+}
+
+/**
+ * Zoom by `factor` keeping the world point under the screen position (sx, sy) fixed — the classic
+ * wheel-zoom-about-cursor. Scale is clamped to [minScale, maxScale]; the translation is derived
+ * from the *clamped* scale so hitting the limit never drifts the anchor.
+ */
+export function zoomAboutPoint(
+  cam: Camera,
+  sx: number,
+  sy: number,
+  factor: number,
+  minScale: number,
+  maxScale: number
+): Camera {
+  const scale = Math.min(maxScale, Math.max(minScale, cam.scale * factor))
+  const k = scale / cam.scale
+  return { x: sx - (sx - cam.x) * k, y: sy - (sy - cam.y) * k, scale }
+}
+
+/** Invert the camera transform, then the projection: screen px (e.g. a click) → world coords. */
+export function cameraScreenToWorld(
+  cam: Camera,
+  proj: Projection,
+  sx: number,
+  sy: number
+): [number, number] {
+  return proj.screenToWorld((sx - cam.x) / cam.scale, (sy - cam.y) / cam.scale)
+}
+
 // ---- Replay-viewer view-models (Gate 6) — pure functions, testable without a canvas. ----------
 
 export interface Flyby {
