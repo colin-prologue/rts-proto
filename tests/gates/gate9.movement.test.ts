@@ -183,6 +183,42 @@ describe('Gate 9 — movement & collision', () => {
     goldenCheck('gate9.army.hash', hashState(s))
   })
 
+  it('combat never stacks: a pack fight keeps one entity per tile throughout', () => {
+    // Strengthening from Gate 9 human review (Colin, 2026-07-06): the movement scenarios above
+    // assert tile exclusivity, but no COMBAT scenario did — fights relied on the code path
+    // alone, and stacking is not visually verifiable in the viewer. Contract: two packs
+    // spawned on distinct tiles and thrown at each other never share a tile at any tick,
+    // through approach, melee, and deaths, until one side is eliminated.
+    let s = initialState(61)
+    for (let i = 0; i < 5; i++) {
+      s = spawn(s, 'grunt', 0, fromInt(8), fromInt(12 + i * 2))
+      s = spawn(s, 'grunt', 1, fromInt(24), fromInt(12 + i * 2))
+    }
+    const side = (owner: number) => s.entities.filter((e) => e.type === 'grunt' && e.owner === owner)
+    expectNoStacks(s) // distinct spawns — the invariant is unconditional from tick 0
+    const orders: Command[] = []
+    for (let i = 0; i < 5; i++) {
+      orders.push(attack(0, side(0)[i].id, side(1)[i].id))
+      orders.push(attack(1, side(1)[i].id, side(0)[i].id))
+    }
+    for (let i = 0; i < 120 && side(0).length > 0 && side(1).length > 0; i++) {
+      // re-target survivors at the lowest-id living enemy so the fight runs to elimination
+      const retarget: Command[] = []
+      for (const owner of [0, 1]) {
+        const foes = side(1 - owner)
+        for (const u of side(owner)) {
+          if (u.attackTarget === undefined && foes.length > 0) {
+            retarget.push(attack(owner, u.id, foes[0].id))
+          }
+        }
+      }
+      s = step(s, s.tick === 0 ? orders : retarget)
+      expectNoStacks(s)
+    }
+    expect(side(0).length === 0 || side(1).length === 0, 'the fight should reach elimination').toBe(true)
+    goldenCheck('gate9.packfight.hash', hashState(s))
+  })
+
   it('the movement-fairness decision record is ratified (not a proposal)', () => {
     const record = readFileSync(resolve('docs/decisions/movement-fairness.md'), 'utf8')
     expect(record, 'flip **Status:** to decided when ratifying').toMatch(/status[^a-z\n]*decided/i)
