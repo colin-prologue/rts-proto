@@ -1,6 +1,6 @@
 # Build plan — gates
 
-Five gates, in order. Each has a **check script** (`scripts/gates/gateN.*`, wired to `npm run
+Nine gates, in order — all merged to main. Each has a **check script** (`scripts/gates/gateN.*`, wired to `npm run
 gate:N`) whose acceptance criteria are written as *mechanical checks* — things Claude runs and whose
 output lands in the transcript, so a goal evaluator can confirm them. A gate is complete only when
 its check exits 0 and prints `GATE N PASS`.
@@ -332,4 +332,4 @@ judgment is the point of the gate and stays out of any goal condition.
 
 `npm run gates:all` runs the gates in order and prints `GATE N PASS` per gate plus a final
 `ALL GATES PASS`. That final line is the single measurable end state for a full-campaign goal.
-(Currently gate:1..8; gate:9 joins the loop as part of its own acceptance.)
+(Currently gate:1..9.)

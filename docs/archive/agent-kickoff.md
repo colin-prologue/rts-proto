@@ -1,4 +1,9 @@
-# AGENT_KICKOFF.md — how to run this with Claude Code /goal
+# agent-kickoff.md — how the Gate 1–7 campaign was run with Claude Code /goal
+
+> **Archived 2026-07-05.** This is the historical record of the goal strings that drove the
+> original build campaign (Gates 1–7). All gates through 9 have since merged; the forward queue
+> lives in GitHub issues (per `CLAUDE.md`), and new gates carry their `/goal` string on their own
+> issue. Nothing here is current process — kept for legibility of how the repo was built.
 
 This repo is the **background context** the agent works against. The `/goal` command wants a short,
 *measurable* condition — not a pasted spec. So: drop these files in, paste the kickoff message once,
