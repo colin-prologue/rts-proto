@@ -219,6 +219,34 @@ describe('Gate 9 — movement & collision', () => {
     goldenCheck('gate9.packfight.hash', hashState(s))
   })
 
+  it('edge-spawned units recover onto the map and never alias a real tile (PR #18 review)', () => {
+    // Codex finding: production drops trained units at building.x+1, so a right-edge depot
+    // spawns them OFF the map; the flow field sees their tile as UNREACHABLE, and the first
+    // implementation deleted the order — stranding them forever, where the placeholder mover
+    // could step back on. Contract: (a) an off-map unit given a MOVE recovers onto passable
+    // ground and arrives; (b) while off-map it must not phantom-occupy the real tile its
+    // wrapped row-major index points at ((32, 10) on a 32-wide map aliases (0, 11)).
+    let s = initialState(71)
+    s = spawn(s, 'depot', 0, fromInt(31), fromInt(10)) // id 2: right-edge producer
+    s = spawn(s, 'grunt', 0, fromInt(2), fromInt(11)) // id 3: the aliasing probe
+    s = step(s, [{ type: 'TRAIN', playerId: 0, seq: 0, unitIds: [2], payload: { unit: 'grunt' } }])
+    while (!s.entities.some((e) => e.type === 'grunt' && e.id > 3)) s = step(s, [])
+    const trained = s.entities.find((e) => e.type === 'grunt' && e.id > 3)!
+    expect(tileXY(s, trained.id)).toEqual([32, 10]) // really spawned off-map
+
+    // (b) the probe walks onto (0, 11) — the tile the off-map unit's wrapped index aliases —
+    // while the trained unit is still standing off-map. Pre-fix this relaxed against a phantom.
+    s = step(s, [move(0, [3], 0, 11)])
+    for (let i = 0; i < 4; i++) s = step(s, [])
+    expect(tileXY(s, 3)).toEqual([0, 11])
+
+    // (a) the off-map unit is not stranded: a MOVE walks it back on and it arrives.
+    s = step(s, [move(0, [trained.id], 28, 10)])
+    for (let i = 0; i < 8; i++) s = step(s, [])
+    expect(tileXY(s, trained.id)).toEqual([28, 10])
+    expect(s.entities.find((e) => e.id === trained.id)!.target).toBeUndefined()
+  })
+
   it('the movement-fairness decision record is ratified (not a proposal)', () => {
     const record = readFileSync(resolve('docs/decisions/movement-fairness.md'), 'utf8')
     expect(record, 'flip **Status:** to decided when ratifying').toMatch(/status[^a-z\n]*decided/i)

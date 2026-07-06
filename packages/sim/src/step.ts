@@ -207,18 +207,23 @@ export function step(state: State, commands: Command[], events?: SimEvent[]): St
   // earlier id is free to a later one, contested tiles go to the lower id.
   const map = state.map
   const pathfinder = createPathfinder(map)
-  const tileOf = (e: Entity) => floorToInt(e.y) * map.w + floorToInt(e.x)
   const snap = new Map<number, { x: Fixed; y: Fixed }>()
   for (const e of entities) snap.set(e.id, { x: e.x, y: e.y })
   // Tile occupancy as counts: spawn stacks are legal, movement never creates a new one.
+  // Off-map positions are never registered — a row-major index computed from out-of-bounds
+  // coords would alias a REAL tile (e.g. (32, 10) on a 32-wide map is (0, 11)'s index), making
+  // an edge-dropped unit a phantom collider on an innocent tile (PR #18 review).
   const occ = new Map<number, number>()
   const movers = new Map<number, number>()
-  const bump = (m: Map<number, number>, k: number, d: number) => {
+  const inBoundsTile = (tx: number, ty: number) => tx >= 0 && ty >= 0 && tx < map.w && ty < map.h
+  const bumpTile = (m: Map<number, number>, tx: number, ty: number, d: number) => {
+    if (!inBoundsTile(tx, ty)) return
+    const k = ty * map.w + tx
     const v = (m.get(k) ?? 0) + d
     if (v === 0) m.delete(k)
     else m.set(k, v)
   }
-  for (const e of entities) bump(occ, tileOf(e), 1)
+  for (const e of entities) bumpTile(occ, floorToInt(e.x), floorToInt(e.y), 1)
 
   // Intent pass: attack approach reads the snapshot; a mover is any entity that wants to move
   // this tick — for arrival relaxation, occupants that never intended to move count as terrain.
@@ -249,7 +254,7 @@ export function step(state: State, commands: Command[], events?: SimEvent[]): St
       exact = false
     }
     intents.push({ e, spec, destX, destY, exact })
-    bump(movers, tileOf(e), 1)
+    bumpTile(movers, floorToInt(e.x), floorToInt(e.y), 1)
   }
 
   // Application pass: follow the flow field one tile per speed point, under tile exclusivity.
@@ -267,7 +272,51 @@ export function step(state: State, commands: Command[], events?: SimEvent[]): St
     const { e, spec } = it
     const field = pathfinder.fieldTo(it.destX, it.destY)
     if (field.costAt(floorToInt(e.x), floorToInt(e.y)) === UNREACHABLE) {
-      delete e.target // no path (walled off) — stop rather than grind
+      if (passableTile(map, floorToInt(e.x), floorToInt(e.y))) {
+        delete e.target // no path (walled off) — stop rather than grind
+        continue
+      }
+      // The unit itself stands on invalid ground — off the map (production drops at
+      // building.x+1, which an edge building puts out of bounds) or inside a wall (BUILD
+      // coords are unvalidated; placement rules are issue #6). The field cannot see it, so
+      // recover: step to the best adjacent passable, unoccupied tile (nearest to the resolved
+      // destination, fixed scan order on ties — the straight line alone can be blocked by the
+      // very building that produced the unit). Wait a tick if every candidate is occupied;
+      // stop only if no adjacent ground exists at all (PR #18 review).
+      const cx0 = floorToInt(e.x)
+      const cy0 = floorToInt(e.y)
+      let bestX = -1
+      let bestY = -1
+      let bestD = UNREACHABLE
+      let sawOccupied = false
+      for (let dy2 = -1; dy2 <= 1; dy2++) {
+        for (let dx2 = -1; dx2 <= 1; dx2++) {
+          if (dx2 === 0 && dy2 === 0) continue
+          const tx = cx0 + dx2
+          const ty = cy0 + dy2
+          if (!passableTile(map, tx, ty)) continue
+          if ((occ.get(ty * map.w + tx) ?? 0) > 0) {
+            sawOccupied = true
+            continue
+          }
+          const d = Math.max(Math.abs(tx - it.destX), Math.abs(ty - it.destY))
+          if (d < bestD) {
+            bestX = tx
+            bestY = ty
+            bestD = d
+          }
+        }
+      }
+      if (bestX < 0) {
+        if (!sawOccupied) delete e.target // no adjacent ground at all — truly stranded terrain
+        continue // occupied candidates: retry next tick
+      }
+      bumpTile(occ, cx0, cy0, -1) // no-op when off-map (never registered)
+      bumpTile(occ, bestX, bestY, 1)
+      bumpTile(movers, cx0, cy0, -1)
+      bumpTile(movers, bestX, bestY, 1)
+      e.x = fromInt(bestX)
+      e.y = fromInt(bestY)
       continue
     }
     for (let leg = 0; leg < spec.speed && e.target; leg++) {
@@ -292,13 +341,14 @@ export function step(state: State, commands: Command[], events?: SimEvent[]): St
         if (stall === 'blocked-stationary') delete e.target
         break
       }
-      const from = cy * map.w + cx
-      bump(occ, from, -1)
-      bump(occ, tile, 1)
-      bump(movers, from, -1)
-      bump(movers, tile, 1)
-      e.x = fromInt(tile % map.w)
-      e.y = fromInt((tile - (tile % map.w)) / map.w)
+      const toX = tile % map.w
+      const toY = (tile - toX) / map.w
+      bumpTile(occ, cx, cy, -1)
+      bumpTile(occ, toX, toY, 1)
+      bumpTile(movers, cx, cy, -1)
+      bumpTile(movers, toX, toY, 1)
+      e.x = fromInt(toX)
+      e.y = fromInt(toY)
       if (e.x === e.target.x && e.y === e.target.y) delete e.target
     }
   }
