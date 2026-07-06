@@ -29,6 +29,7 @@ import {
   TILE_H,
   TILE_W,
   type Camera,
+  type ScreenBounds,
 } from '@rts/render'
 
 const TICK_MS = 100 // 10 Hz sim, per architecture; render interpolates at display rate
@@ -63,6 +64,7 @@ const PAN_PX_PER_FRAME = 12
 
 let cam: Camera = { x: 0, y: 0, scale: 1 }
 let zoomMin = ZOOM_MIN // floored at the fit scale, so the full-map view is always reachable
+let mapBounds: ScreenBounds | null = null // kept for refitting the floor when the viewport changes
 let viewW = window.innerWidth
 let viewH = window.innerHeight
 
@@ -74,16 +76,21 @@ function applyCamera() {
 
 /** Initial framing: fit the whole map (from state.map bounds) into the viewport. */
 function frameMap(map: { w: number; h: number }) {
-  cam = fitCamera(mapScreenBounds(map, proj), viewW, viewH, 48)
+  mapBounds = mapScreenBounds(map, proj)
+  cam = fitCamera(mapBounds, viewW, viewH, 48)
   zoomMin = Math.min(ZOOM_MIN, cam.scale)
   applyCamera()
 }
 
-// Resize: keep the world point at the old viewport center at the new center, same zoom.
+// Resize: keep the world point at the old viewport center at the new center, same zoom — and
+// refit the zoom floor: a narrower window needs a smaller fit scale or the full-map view becomes
+// unreachable. cam.scale joins the min so a *grown* window never leaves the current zoom below
+// the floor (the next wheel event would snap it).
 window.addEventListener('resize', () => {
   cam = { ...cam, x: cam.x + (window.innerWidth - viewW) / 2, y: cam.y + (window.innerHeight - viewH) / 2 }
   viewW = window.innerWidth
   viewH = window.innerHeight
+  if (mapBounds) zoomMin = Math.min(ZOOM_MIN, fitCamera(mapBounds, viewW, viewH, 48).scale, cam.scale)
   applyCamera()
 })
 
